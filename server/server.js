@@ -6,6 +6,7 @@ import path from 'path';
 import fs from 'fs';
 import { env } from 'process';
 import { fileURLToPath } from 'url';
+import { Readable } from 'stream';
 import { transcribeVideo } from './whisper-service.js';
 import { analyzeTranscript, analyzeTranscriptStream, generateChapterVTT, chatWithHistoryStream } from './ai-service.js';
 import { convertToHLS } from './hls-service.js';
@@ -257,11 +258,13 @@ app.post('/api/analyze/stream', async (req, res) => {
 
     log(`[API] 接收到视频分析请求，字幕长度: ${transcript.length}`);
 
-    const stream = await analyzeTranscriptStream(transcript);
+    const webStream = await analyzeTranscriptStream(transcript);
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
     res.setHeader('Transfer-Encoding', 'chunked');
 
-    stream.pipe(res);
+    // 将 Web Stream 转换为 Node.js Stream 并管道到响应
+    const nodeReadable = Readable.fromWeb(webStream);
+    nodeReadable.pipe(res);
   } catch (error) {
     log(`[API] 分析视频失败: ${error.message}`);
     res.status(500).json({ error: '分析失败' });
