@@ -7,7 +7,7 @@ import fs from 'fs';
 import { env } from 'process';
 import { fileURLToPath } from 'url';
 import { transcribeVideo } from './whisper-service.js';
-import { analyzeTranscript, analyzeTranscriptStream, generateChapterVTT } from './ai-service.js';
+import { analyzeTranscript, analyzeTranscriptStream, generateChapterVTT, chatWithHistoryStream } from './ai-service.js';
 import { convertToHLS } from './hls-service.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -142,7 +142,8 @@ app.post('/upload/video', upload.single('video'), async (req, res) => {
       filename: file.originalname,
       size: file.size,
       mimeType: file.mimetype,
-      path: `/uploads/videos/${file.filename}`,
+      path: `/uploads/videos/transcription/${fileId}/video/${fileId}${path.extname(file.filename)}`,
+      vttPath: `/uploads/videos/transcription/${fileId}/subtitle/${fileId}.vtt`,
       transcript: transcript
     };
 
@@ -219,6 +220,121 @@ app.use((error, req, res, next) => {
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
+});
+
+/**
+ * 分析视频字幕（流式）
+ */
+app.post('/api/analyze/stream', async (req, res) => {
+  try {
+    const { transcript } = req.body;
+
+    if (!transcript) {
+      return res.status(400).json({ error: '缺少 transcript 参数' });
+    }
+
+    log(`[API] 接收到视频分析请求，字幕长度: ${transcript.length}`);
+
+    const stream = await analyzeTranscriptStream(transcript);
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Transfer-Encoding', 'chunked');
+
+    stream.pipe(res);
+  } catch (error) {
+    log(`[API] 分析视频失败: ${error.message}`);
+    res.status(500).json({ error: '分析失败' });
+  }
+});
+
+/**
+ * 生成章节VTT
+ */
+app.post('/api/generate-chapters', async (req, res) => {
+  try {
+    const { fileId, transcript, duration } = req.body;
+
+    if (!fileId || !transcript) {
+      return res.status(400).json({ error: '缺少必要参数' });
+    }
+
+    log(`[API] 接收到章节生成请求，fileId: ${fileId}, 时长: ${duration}s`);
+
+    // 创建章节目录
+    const chapterDir = path.join(__dirname, 'uploads', 'videos', 'transcription', fileId, 'chapter');
+    ensureDirectoryExists(chapterDir);
+
+    // 分析字幕并生成章节
+    const analysisResult = await analyzeTranscript(transcript, duration);
+    const vttContent = generateChapterVTT(analysisResult);
+
+    // 保存VTT文件
+    const vttPath = path.join(chapterDir, `${fileId}_chapters.vtt`);
+    fs.writeFileSync(vttPath, vttContent, 'utf8');
+
+    const vttUrlPath = `/uploads/videos/transcription/${fileId}/chapter/${fileId}_chapters.vtt`;
+
+    res.json({
+      success: true,
+      chapterVttPath: vttUrlPath,
+      segments: analysisResult.segments
+    });
+  } catch (error) {
+    log(`[API] 生成章节失败: ${error.message}`);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * 聊天API
+ */
+app.post('/api/chat', async (req, res) => {
+  try {
+    const { question, transcript, messages } = req.body;
+
+    if (!question) {
+      return res.status(400).json({ error: '缺少 question 参数' });
+    }
+
+    log(`[API] 接收到聊天请求: ${question.substring(0, 30)}...`);
+
+    // 构建消息历史
+    const chatMessages = [];
+
+    // 添加系统提示
+    chatMessages.push({
+      role: 'system',
+      content: '你是一个视频内容分析助手，擅长分析视频字幕内容并回答相关问题。'
+    });
+
+    // 添加历史消息
+    if (messages && Array.isArray(messages)) {
+      messages.forEach(msg => {
+        chatMessages.push({
+          role: msg.role,
+          content: msg.content
+        });
+      });
+    }
+
+    // 添加当前问题（包含字幕上下文）
+    const userContent = transcript
+      ? `视频字幕内容：\n${transcript}\n\n问题：${question}`
+      : question;
+
+    chatMessages.push({
+      role: 'user',
+      content: userContent
+    });
+
+    const stream = await chatWithHistoryStream(chatMessages);
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Transfer-Encoding', 'chunked');
+
+    stream.pipe(res);
+  } catch (error) {
+    log(`[API] 聊天请求失败: ${error.message}`);
+    res.status(500).json({ error: '聊天失败' });
+  }
 });
 
 app.listen(PORT, () => {

@@ -30,6 +30,10 @@ export default function VideoPlayer({ video, isUploading, uploadProgress, onVide
 
   useEffect(() => {
     if (!isReady) return;
+    if (!video) {
+      console.warn('[VideoPlayer] video prop 为空，跳过初始化');
+      return;
+    }
     
     console.log('[VideoPlayer] === 开始初始化播放器 ===');
     console.log('[VideoPlayer] video prop:', video);
@@ -46,10 +50,12 @@ export default function VideoPlayer({ video, isUploading, uploadProgress, onVide
     }
 
     try {
-        if (playerRef.current) {
-    console.log('[VideoPlayer] 播放器已存在，跳过重复初始化');
-    return;
-  }
+      if (playerRef.current && !playerRef.current.isDisposed()) {
+        console.log('[VideoPlayer] 清理旧播放器');
+        playerRef.current.dispose();
+        playerRef.current = null;
+      }
+
       const player = videojs(videoElement, {
         autoplay: false,
         controls: true,
@@ -67,10 +73,9 @@ export default function VideoPlayer({ video, isUploading, uploadProgress, onVide
             'progressControl',
             'playbackRateMenuButton',
             'qualityMenu',
-            'pictureInPictureToggle',
             'chaptersButton',
+            'pictureInPictureToggle',
             'fullscreenToggle'
-            
           ]
         }
       });
@@ -85,7 +90,13 @@ export default function VideoPlayer({ video, isUploading, uploadProgress, onVide
         }
       };
 
+      const handleError = (e) => {
+        console.error('[VideoPlayer] 视频播放错误:', e);
+        setError('视频加载失败，请检查网络连接或视频格式');
+      };
+
       player.on('canplay', handleCanPlay);
+      player.on('error', handleError);
       
       // 在播放器初始化时就添加 loadedmetadata 监听
       const handleMetadataInit = () => {
@@ -115,11 +126,6 @@ export default function VideoPlayer({ video, isUploading, uploadProgress, onVide
                 label: '章节',
                 mode:'showing'
               }, true);
-               player.controlBar.children_.forEach(child => {
-    if (child.name && child.name === 'ChaptersButton') {
-      child.update();
-    }
-  });
               console.log('chaptersrc',chapterSrc)
               if (data.segments && onChaptersGenerated) {
                 onChaptersGenerated(data.segments);
@@ -133,37 +139,46 @@ export default function VideoPlayer({ video, isUploading, uploadProgress, onVide
       player.on('loadedmetadata', handleMetadataInit);
       
       // 在播放器初始化后立即设置视频源
-      if (video) {
-        console.log('[VideoPlayer] === 开始设置视频源 ===');
-        const src = video.hls?.masterPlaylistUrl || video.path || video.url;
-        const type = video.hls ? 'application/x-mpegURL' : 'video/mp4';
-        const videoSrc = src.startsWith('http') ? src : SERVER_URL + src;
-        
-        console.log('[VideoPlayer] 设置视频源:', videoSrc);
-        player.src({ src: videoSrc, type });
+      console.log('[VideoPlayer] === 开始设置视频源 ===');
+      const src = video.hls?.masterPlaylistUrl || video.path || video.url;
+      if (!src) {
+        console.error('[VideoPlayer] 视频源 URL 为空');
+        setError('视频源 URL 为空');
+        return;
+      }
+      
+      const type = video.hls ? 'application/x-mpegURL' : 'video/mp4';
+      const videoSrc = src.startsWith('http') ? src : SERVER_URL + src;
+      
+      console.log('[VideoPlayer] 设置视频源:', videoSrc);
+      player.src({ src: videoSrc, type });
 
-        if (video.vttPath) {
-          const vttSrc = video.vttPath.startsWith('http') ? video.vttPath : SERVER_URL + video.vttPath;
-          player.addRemoteTextTrack({
-            kind: 'subtitles',
-            src: vttSrc,
-            srclang: 'zh',
-            label: '中文',
-            model: 'showing'
-          }, false);
-        }
+      if (video.vttPath) {
+        console.log('[VideoPlayer] 设置字幕源:', video.vttPath);
+        const vttSrc = video.vttPath.startsWith('http') ? video.vttPath : SERVER_URL + video.vttPath;
+        player.addRemoteTextTrack({
+          kind: 'subtitles',
+          src: vttSrc,
+          srclang: 'zh',
+          label: '中文',
+          mode: 'showing'
+        }, false);
+      }
 
-        if (video.hls && player.qualityLevels) {
-          const check = () => player.qualityLevels()?.levels_.length
-            ? player.qualityMenu({ displayQuality: 'height' })
-            : setTimeout(check, 200);
-          check();
-        }
+      if (video.hls && player.qualityLevels) {
+        const check = () => player.qualityLevels()?.levels_.length
+          ? player.qualityMenu({ displayQuality: 'height' })
+          : setTimeout(check, 200);
+        check();
       }
       
       return () => {
         player.off('canplay', handleCanPlay);
+        player.off('error', handleError);
         player.off('loadedmetadata', handleMetadataInit);
+        if (!player.isDisposed()) {
+          player.dispose();
+        }
       };
     } catch (err) {
       console.error('[VideoPlayer] 播放器初始化失败:', err);

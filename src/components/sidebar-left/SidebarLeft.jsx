@@ -2,10 +2,10 @@ import { useState, useRef } from 'react'
 import { SERVER_URL } from '../../config'
 import UploadDropzone from './UploadDropzone'
 import UploadProgress from './UploadProgress'
-
+import React from 'react';
 import VideoPlayer from '../VideoPlayer'
 
-function SidebarLeft() {
+function SidebarLeft({ onVideoUpload, onVideoRemove }) {
   const [isDragging, setIsDragging] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
@@ -73,7 +73,12 @@ function SidebarLeft() {
           size: result.size,
           fileId: result.fileId,
           transcript: result.transcript || '',
-        });
+          vttPath: result.vttPath || '',
+        };
+        setUploadedVideo(videoData);
+        if (onVideoUpload) {
+          onVideoUpload(videoData);
+        }
         setUploadStatus({ success: true, message: result.filename + ' 上传成功' });
       } else {
         console.error('上传失败:', result.error);
@@ -105,21 +110,9 @@ function SidebarLeft() {
   const handleReupload = () => {
     setUploadedVideo(null);
     setUploadStatus(null);
-  };
-
-  const videoRef = useRef(null);
-
-  const handleVideoClick = () => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    if (video.paused) {
-      video.play();
-    } else {
-      video.pause();
+    if (onVideoRemove) {
+      onVideoRemove();
     }
-
-    console.log('视频播放/暂停 点击了！');
   };
 
   const renderUploadArea = () => {
@@ -130,15 +123,10 @@ function SidebarLeft() {
     if (uploadedVideo) {
       return (
         <div className="video-preview">
-          <video
-            ref={videoRef}
-            className="preview-video"
-            src={uploadedVideo.url}
-            controls
-            autoPlay
-            muted
-            playsInline
-            onClick={handleVideoClick}
+          <VideoPlayer 
+            video={uploadedVideo} 
+            isUploading={isUploading}
+            uploadProgress={uploadProgress}
           />
           <div className="video-info">
             <p className="video-name">{uploadedVideo.filename}</p>
