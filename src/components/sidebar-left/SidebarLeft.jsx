@@ -74,6 +74,7 @@ function SidebarLeft({ onVideoUpload, onVideoRemove }) {
           fileId: result.fileId,
           transcript: result.transcript || '',
           vttPath: result.vttPath || '',
+          hls: result.hls || null,
         };
         setUploadedVideo(videoData);
         if (onVideoUpload) {

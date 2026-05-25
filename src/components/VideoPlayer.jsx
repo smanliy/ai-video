@@ -151,6 +151,8 @@ export default function VideoPlayer({ video, isUploading, uploadProgress, onVide
       const videoSrc = src.startsWith('http') ? src : SERVER_URL + src;
       
       console.log('[VideoPlayer] 设置视频源:', videoSrc);
+      console.log('[VideoPlayer] 当前视频源:', player.currentSrc());
+  console.log('[VideoPlayer] 是否为HLS流:', !!player.hls);
       player.src({ src: videoSrc, type });
 
       if (video.vttPath) {
@@ -165,12 +167,42 @@ export default function VideoPlayer({ video, isUploading, uploadProgress, onVide
         }, false);
       }
 
-      if (video.hls && player.qualityLevels) {
-        const check = () => player.qualityLevels()?.levels_.length
-          ? player.qualityMenu({ displayQuality: 'height' })
-          : setTimeout(check, 200);
-        check();
-      }
+      // 初始化清晰度菜单
+      const initQualityMenu = () => {
+
+        if (player.qualityLevels) {
+          const levels = player.qualityLevels();
+          console.log('levels',levels);
+          console.log('levels.levels_',levels.levels_);
+          console.log('levels.levels_.length',levels.levels_.length);
+          if (levels && levels.levels_ && levels.levels_.length > 1) {
+            console.log('[VideoPlayer] 检测到多个清晰度级别:', levels.levels_.length);
+            player.qualityMenu({ displayQuality: 'height' });
+          } else if (video.hls) {
+            // HLS流可能需要时间加载清晰度级别
+            const checkLevels = () => {
+              const currentLevels = player.qualityLevels();
+              if (currentLevels && currentLevels.levels_ && currentLevels.levels_.length > 1) {
+                console.log('[VideoPlayer] HLS清晰度级别加载完成:', currentLevels.levels_.length);
+                player.qualityMenu({ displayQuality: 'height' });
+              } else {
+                setTimeout(checkLevels, 500);
+              }
+            };
+            checkLevels();
+          }
+        } else {
+          console.log('[VideoPlayer] qualityLevels 插件未加载');
+        }
+      };
+      
+      // 在视频可以播放后初始化清晰度菜单
+      player.one('loadedmetadata', () => {
+        initQualityMenu();
+      });
+      
+      // 同时设置一个延迟检查
+      setTimeout(initQualityMenu, 3000);
       
       return () => {
         player.off('canplay', handleCanPlay);

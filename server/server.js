@@ -124,17 +124,35 @@ app.post('/upload/video', upload.single('video'), async (req, res) => {
     log(`文件ID: ${fileId}`);
     log(`保存路径: ${newVideoPath}`);
 
-    // 语音识别
-    log(`--- 步骤1: 语音识别 ---`);
-    let transcript = '';
-    try {
-      transcript = await transcribeVideo(newVideoPath, subtitleDir);
-      log(`语音识别成功，字幕长度: ${transcript.length} 字符`);
-      log(`字幕VTT已保存到: ${subtitleDir}`);
-    } catch (error) {
-      log(`语音识别失败: ${error.message}`);
-      transcript = '语音识别失败';
-    }
+    // 并发执行：语音识别 和 HLS转码
+    log(`--- 并发任务开始 ---`);
+    const [transcript, hlsData] = await Promise.all([
+      // 任务1：语音识别（生成字幕）
+      transcribeVideo(newVideoPath, subtitleDir)
+        .then(result => {
+          log(`语音识别成功，字幕长度: ${result.length} 字符`);
+          log(`字幕VTT已保存到: ${subtitleDir}`);
+          return result;
+        })
+        .catch(err => {
+          log(`语音识别失败: ${err.message}`);
+          return '语音识别失败';
+        }),
+
+      // 任务2：HLS转码（生成多清晰度流）
+      convertToHLS(newVideoPath, baseDir)
+        .then(result => {
+          log(`HLS转码成功，生成 master.m3u8: ${result.masterPlaylistUrl}`);
+          log(`清晰度级别: ${result.streams.map(s => s.quality).join(', ')}`);
+          return result;
+        })
+        .catch(err => {
+          log(`HLS转码失败: ${err.message}`);
+          log(`将使用原始视频播放`);
+          return null;
+        })
+    ]);
+    log(`--- 并发任务完成 ---`);
 
     const response = {
       success: true,
@@ -144,11 +162,15 @@ app.post('/upload/video', upload.single('video'), async (req, res) => {
       mimeType: file.mimetype,
       path: `/uploads/videos/transcription/${fileId}/video/${fileId}${path.extname(file.filename)}`,
       vttPath: `/uploads/videos/transcription/${fileId}/subtitle/${fileId}.vtt`,
-      transcript: transcript
+      transcript: transcript,
+      hls: hlsData ? {
+        masterPlaylistUrl: hlsData.masterPlaylistUrl,
+        streams: hlsData.streams
+      } : null
     };
 
     log(`=== 视频上传完成 ===`);
-    log(`返回字段: fileId, vttPath, transcript`);
+    log(`返回字段: fileId, vttPath, transcript, hls`);
     log(`章节VTT将在前端获取视频真实时长后生成`);
 
     res.json(response);
