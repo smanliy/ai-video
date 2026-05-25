@@ -8,7 +8,7 @@ import ChatBubble from "./ChatBubble";
 /**
  * 主内容区域组件 - AI 聊天界面
  */
-function MainContent({ uploadedVideo }) {
+function MainContent({ uploadedVideo, initialSegments }) {
   // 状态管理：消息列表
   const [messages, setMessages] = useState([]);
   // 状态管理：当前输入的问题
@@ -323,6 +323,9 @@ function MainContent({ uploadedVideo }) {
    */
   useEffect(() => {
     if (uploadedVideo && !isLoading) {
+      // 设置加载状态
+      setIsLoading(true);
+      
       // 清空之前的消息
       setMessages([]);
       
@@ -333,13 +336,21 @@ function MainContent({ uploadedVideo }) {
         sender: 'assistant',
         content: `🎬 正在分析视频：${uploadedVideo.filename}...`
       }]);
-
-      // 延迟一秒后开始分析，让用户看到提示
-      setTimeout(() => {
-        analyzeVideo();
-      }, 1000);
     }
   }, [uploadedVideo]);
+
+  // 当 initialSegments 到达时，直接显示结果（替换正在分析的消息）
+  useEffect(() => {
+    if (initialSegments && isLoading) {
+      const formattedResult = formatAnalysisResult(initialSegments);
+      setMessages([{
+        id: `result_${Date.now()}`,
+        sender: 'assistant',
+        content: `🎬 视频分析完成：${uploadedVideo?.filename}\n\n${formattedResult}`
+      }]);
+      setIsLoading(false);
+    }
+  }, [initialSegments, isLoading]);
 
   return (
     // 外层容器：使用 flex 布局，确保输入框固定在底部

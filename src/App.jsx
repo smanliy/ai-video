@@ -10,13 +10,20 @@ import './App.css'
  */
 function App() {
   const [uploadedVideo, setUploadedVideo] = useState(null)
+  const [segments, setSegments] = useState(null)
 
   const handleVideoUpload = useCallback((videoData) => {
     setUploadedVideo(videoData)
+    setSegments(null) // 重置segments
   }, [])
 
   const handleVideoRemove = useCallback(() => {
     setUploadedVideo(null)
+    setSegments(null)
+  }, [])
+
+  const handleSegmentsGenerated = useCallback((newSegments) => {
+    setSegments(newSegments)
   }, [])
 
   return (
@@ -25,10 +32,11 @@ function App() {
       <SidebarLeft
         onVideoUpload={handleVideoUpload}
         onVideoRemove={handleVideoRemove}
+        onSegmentsGenerated={handleSegmentsGenerated}
       />
 
       {/* 中间主内容区 - AI聊天界面 */}
-      <MainContent uploadedVideo={uploadedVideo} />
+      <MainContent uploadedVideo={uploadedVideo} initialSegments={segments} />
 
       {/* 右侧边栏 - 笔记和导出 */}
       <SidebarRight />

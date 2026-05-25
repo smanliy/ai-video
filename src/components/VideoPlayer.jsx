@@ -127,8 +127,12 @@ export default function VideoPlayer({ video, isUploading, uploadProgress, onVide
                 mode:'showing'
               }, true);
               console.log('chaptersrc',chapterSrc)
-              if (data.segments && onChaptersGenerated) {
-                onChaptersGenerated(data.segments);
+              if (onChaptersGenerated) {
+                // 传递完整数据（包含 summary 和 segments）
+                onChaptersGenerated({
+                  summary: data.summary || '暂无总结',
+                  segments: data.segments || []
+                });
               }
             }
           })

@@ -301,6 +301,7 @@ app.post('/api/generate-chapters', async (req, res) => {
     res.json({
       success: true,
       chapterVttPath: vttUrlPath,
+      summary: analysisResult.summary || '',
       segments: analysisResult.segments
     });
   } catch (error) {
