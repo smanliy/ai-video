@@ -8,13 +8,15 @@ import ChatBubble from "./ChatBubble";
 /**
  * 主内容区域组件 - AI 聊天界面
  */
-function MainContent({ uploadedVideo, initialSegments }) {
+function MainContent({ uploadedVideo, initialSegments, onJumpToTime }) {
   // 状态管理：消息列表
   const [messages, setMessages] = useState([]);
   // 状态管理：当前输入的问题
   const [inputValue, setInputValue] = useState("");
   // 状态管理：加载状态
   const [isLoading, setIsLoading] = useState(false);
+  // 状态管理：是否正在进行视频分析（用于区分视频分析和聊天）
+  const [isAnalyzingVideo, setIsAnalyzingVideo] = useState(false);
   // 引用：消息容器（用于滚动）
   const messagesContainerRef = useRef(null);
   // 引用：外层容器
@@ -44,7 +46,7 @@ function MainContent({ uploadedVideo, initialSegments }) {
       data.segments.forEach((segment, index) => {
         const start = formatTime(segment.startTime);
         const end = formatTime(segment.endTime);
-        const timeRange = `${start} - ${end}`;
+        const timeRange = `[${start} - ${end}](timestamp:${segment.startTime})`;
         result += `🎬 **分片${index + 1}**：${segment.title || "未命名"}（${timeRange}）\n\n${segment.description || "暂无描述"}\n\n`;
       });
     }
@@ -216,21 +218,45 @@ function MainContent({ uploadedVideo, initialSegments }) {
 
       // 处理流式响应 - 边接收边显示
       const reader = response.body.getReader();
-      const decoder = new TextDecoder();
+      const decoder = new TextDecoder('utf-8');
       let accumulatedContent = "";
+      let buffer = new Uint8Array(0);
 
       while (true) {
         const { done, value } = await reader.read();
         
-        if (done) break;
+        if (done) {
+          // 处理最后剩余的数据
+          if (buffer.length > 0) {
+            accumulatedContent += decoder.decode(buffer, { stream: false });
+            setMessages(prev => prev.map(msg =>
+              msg.id === replyId ? { ...msg, content: accumulatedContent } : msg
+            ));
+          }
+          break;
+        }
         
-        const chunk = decoder.decode(value, { stream: true });
-        accumulatedContent += chunk;
+        // 将新数据添加到缓冲区
+        const newBuffer = new Uint8Array(buffer.length + value.length);
+        newBuffer.set(buffer, 0);
+        newBuffer.set(value, buffer.length);
+        buffer = newBuffer;
         
-        // 立即更新UI，实现真正的流式输出
-        setMessages(prev => prev.map(msg =>
-          msg.id === replyId ? { ...msg, content: accumulatedContent } : msg
-        ));
+        // 尝试解码完整字符
+        try {
+          const chunk = decoder.decode(buffer, { stream: true });
+          if (chunk.length > 0) {
+            accumulatedContent += chunk;
+            // 立即更新UI，实现真正的流式输出
+            setMessages(prev => prev.map(msg =>
+              msg.id === replyId ? { ...msg, content: accumulatedContent } : msg
+            ));
+            // 清空已解码的部分
+            buffer = new Uint8Array(0);
+          }
+        } catch (e) {
+          // 字符不完整，继续等待更多数据
+        }
         
         // 添加微小延迟，避免UI更新过快
         await new Promise(resolve => setTimeout(resolve, 10));
@@ -291,6 +317,8 @@ function MainContent({ uploadedVideo, initialSegments }) {
     if (uploadedVideo && !isLoading) {
       // 设置加载状态
       setIsLoading(true);
+      // 设置视频分析状态
+      setIsAnalyzingVideo(true);
       
       // 清空之前的消息
       setMessages([]);
@@ -307,7 +335,7 @@ function MainContent({ uploadedVideo, initialSegments }) {
 
   // 当 initialSegments 到达时，直接显示结果（替换正在分析的消息）
   useEffect(() => {
-    if (initialSegments && isLoading) {
+    if (initialSegments && isLoading && isAnalyzingVideo) {
       const formattedResult = formatAnalysisResult(initialSegments);
       setMessages([{
         id: `result_${Date.now()}`,
@@ -315,8 +343,9 @@ function MainContent({ uploadedVideo, initialSegments }) {
         content: `🎬 视频分析完成：${uploadedVideo?.filename}\n\n${formattedResult}`
       }]);
       setIsLoading(false);
+      setIsAnalyzingVideo(false);
     }
-  }, [initialSegments, isLoading]);
+  }, [initialSegments, isLoading, isAnalyzingVideo]);
 
   return (
     // 外层容器：使用 flex 布局，确保输入框固定在底部
@@ -377,6 +406,7 @@ function MainContent({ uploadedVideo, initialSegments }) {
               content={message.content}
               sender={message.sender}
               isLoading={isLoading && message.sender === 'assistant' && message.id === messages[messages.length - 1]?.id}
+              onJumpToTime={onJumpToTime}
             />
           ))}
 

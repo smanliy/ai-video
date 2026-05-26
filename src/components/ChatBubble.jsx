@@ -3,8 +3,76 @@ import React from 'react'
 // 导入 Markdown 渲染组件
 import ReactMarkdown from 'react-markdown'
 
-function ChatBubble({ content, sender = 'assistant', isLoading = false }) {
+function ChatBubble({ content, sender = 'assistant', isLoading = false, onJumpToTime }) {
   const isAssistant = sender === 'assistant'
+
+  const handleTimeClick = (timeInSeconds) => {
+    console.log('111');
+    if (onJumpToTime && !isNaN(timeInSeconds)) {
+      onJumpToTime(timeInSeconds);
+    }
+  };
+
+  // 渲染时间戳链接
+  const renderTimestampLink = (text, timeInSeconds) => {
+    return (
+      <span 
+        onClick={() => handleTimeClick(timeInSeconds)}
+        style={{
+          color: '#ffd700',
+          textDecoration: 'underline',
+          cursor: 'pointer',
+          fontWeight: '500'
+        }}
+      >
+        {text}
+      </span>
+    );
+  };
+
+  // 处理内容：将时间戳链接转换为可点击的 span，同时保留 Markdown 渲染
+  const renderContent = () => {
+    if (!content) return '等待回复...';
+    
+    // 使用正则表达式匹配时间戳链接 [时间范围](timestamp:秒数)
+    const timestampRegex = /\[([^\]]+)\]\(timestamp:([0-9.]+)\)/g;
+    const parts = [];
+    let lastIndex = 0;
+    let match;
+    
+    while ((match = timestampRegex.exec(content)) !== null) {
+      // 添加匹配前的普通文本（使用 ReactMarkdown 渲染，设置为内联模式）
+      if (match.index > lastIndex) {
+        const textContent = content.slice(lastIndex, match.index);
+        parts.push(
+          <span key={`text-${lastIndex}`} style={{ display: 'inline' }}>
+            <ReactMarkdown components={{ p: ({ children }) => <span>{children}</span> }}>
+              {textContent}
+            </ReactMarkdown>
+          </span>
+        );
+      }
+      // 添加可点击的时间戳链接（内联显示）
+      parts.push(<span key={`timestamp-${match[2]}`} style={{ display: 'inline' }}>
+        {renderTimestampLink(match[1], parseFloat(match[2]))}
+      </span>);
+      lastIndex = match.index + match[0].length;
+    }
+    
+    // 添加剩余的文本（使用 ReactMarkdown 渲染，设置为内联模式）
+    if (lastIndex < content.length) {
+      const textContent = content.slice(lastIndex);
+      parts.push(
+        <span key={`text-${lastIndex}`} style={{ display: 'inline' }}>
+          <ReactMarkdown components={{ p: ({ children }) => <span>{children}</span> }}>
+            {textContent}
+          </ReactMarkdown>
+        </span>
+      );
+    }
+    
+    return parts;
+  };
 
   return (
     <div style={{ 
@@ -42,7 +110,7 @@ function ChatBubble({ content, sender = 'assistant', isLoading = false }) {
           position: 'relative'
         }}>
           <div style={{ fontSize: '14px', lineHeight: '1.6', color: '#ffffff', whiteSpace: 'pre-wrap' }}>
-            <ReactMarkdown>{content || '等待回复...'}</ReactMarkdown>
+            {renderContent()}
           </div>
 
           {isLoading && (

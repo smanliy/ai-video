@@ -11,6 +11,7 @@ import './App.css'
 function App() {
   const [uploadedVideo, setUploadedVideo] = useState(null)
   const [segments, setSegments] = useState(null)
+  const [jumpToTime, setJumpToTime] = useState(null)
 
   const handleVideoUpload = useCallback((videoData) => {
     setUploadedVideo(videoData)
@@ -26,6 +27,12 @@ function App() {
     setSegments(newSegments)
   }, [])
 
+  const handleJumpToTime = useCallback((timeInSeconds) => {
+    setJumpToTime(timeInSeconds)
+    // 重置状态以便下次跳转
+    setTimeout(() => setJumpToTime(null), 100)
+  }, [])
+
   return (
     <div className="app-container">
       {/* 左侧边栏 - 视频上传和控制 */}
@@ -33,10 +40,15 @@ function App() {
         onVideoUpload={handleVideoUpload}
         onVideoRemove={handleVideoRemove}
         onSegmentsGenerated={handleSegmentsGenerated}
+        jumpToTime={jumpToTime}
       />
 
       {/* 中间主内容区 - AI聊天界面 */}
-      <MainContent uploadedVideo={uploadedVideo} initialSegments={segments} />
+      <MainContent 
+        uploadedVideo={uploadedVideo} 
+        initialSegments={segments}
+        onJumpToTime={handleJumpToTime}
+      />
 
       {/* 右侧边栏 - 笔记和导出 */}
       <SidebarRight />

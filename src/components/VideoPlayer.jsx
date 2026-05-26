@@ -6,7 +6,7 @@ import 'videojs-contrib-quality-menu';
 import 'videojs-contrib-quality-menu/dist/videojs-contrib-quality-menu.css';
 import { SERVER_URL } from '../config';
 
-export default function VideoPlayer({ video, isUploading, uploadProgress, onVideoReady, onChaptersGenerated, previewImage }) {
+export default function VideoPlayer({ video, isUploading, uploadProgress, onVideoReady, onChaptersGenerated, previewImage, jumpToTime }) {
   const videoRef = useRef(null);
   const playerRef = useRef(null);
   const [error, setError] = useState(null);
@@ -221,6 +221,18 @@ export default function VideoPlayer({ video, isUploading, uploadProgress, onVide
       setError(`播放器初始化失败: ${err.message}`);
     }
   }, [isReady, onVideoReady, video, onChaptersGenerated]);
+
+  // 监听跳转到指定时间的请求
+  useEffect(() => {
+    if (jumpToTime !== null && playerRef.current && !playerRef.current.isDisposed()) {
+      const timeInSeconds = parseFloat(jumpToTime);
+      if (!isNaN(timeInSeconds)) {
+        console.log('[VideoPlayer] 跳转到时间:', timeInSeconds, '秒');
+        playerRef.current.currentTime(timeInSeconds);
+        playerRef.current.play();
+      }
+    }
+  }, [jumpToTime]);
 
   if (error) {
     return (

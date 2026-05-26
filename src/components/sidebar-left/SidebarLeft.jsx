@@ -5,7 +5,7 @@ import UploadProgress from './UploadProgress'
 import React from 'react';
 import VideoPlayer from '../VideoPlayer'
 
-function SidebarLeft({ onVideoUpload, onVideoRemove, onSegmentsGenerated }) {
+function SidebarLeft({ onVideoUpload, onVideoRemove, onSegmentsGenerated, jumpToTime }) {
   const [isDragging, setIsDragging] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
@@ -129,6 +129,7 @@ function SidebarLeft({ onVideoUpload, onVideoRemove, onSegmentsGenerated }) {
             isUploading={isUploading}
             uploadProgress={uploadProgress}
             onChaptersGenerated={onSegmentsGenerated}
+            jumpToTime={jumpToTime}
           />
           <div className="video-info">
             <p className="video-name">{uploadedVideo.filename}</p>
