@@ -352,11 +352,13 @@ app.post('/api/chat', async (req, res) => {
       content: userContent
     });
 
-    const stream = await chatWithHistoryStream(chatMessages);
+    const webStream = await chatWithHistoryStream(chatMessages);
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
     res.setHeader('Transfer-Encoding', 'chunked');
 
-    stream.pipe(res);
+    // 将 Web Stream 转换为 Node.js Stream 并管道到响应
+    const nodeReadable = Readable.fromWeb(webStream);
+    nodeReadable.pipe(res);
   } catch (error) {
     log(`[API] 聊天请求失败: ${error.message}`);
     res.status(500).json({ error: '聊天失败' });

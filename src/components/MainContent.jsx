@@ -173,7 +173,12 @@ function MainContent({ uploadedVideo, initialSegments }) {
       sender: 'user',
       content: userQuestion
     };
-    setMessages(prev => [...prev, userMessage]);
+    
+    // 创建新的消息列表（包含用户消息）
+    const newMessages = [...messages, userMessage];
+    console.log('[MainContent] 添加用户消息:', userMessage);
+    console.log('[MainContent] 新消息列表:', newMessages);
+    setMessages(newMessages);
     
     if (!question) {
       setInputValue("");
@@ -190,7 +195,7 @@ function MainContent({ uploadedVideo, initialSegments }) {
         body: JSON.stringify({
           question: userQuestion,
           transcript: uploadedVideo?.transcript || '',
-          messages: messages.map(msg => ({
+          messages: newMessages.map(msg => ({
             role: msg.sender === 'assistant' ? 'assistant' : 'user',
             content: msg.content
           }))
@@ -209,65 +214,26 @@ function MainContent({ uploadedVideo, initialSegments }) {
         content: ""
       }]);
 
-      // 处理流式响应
+      // 处理流式响应 - 边接收边显示
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
-      let fullResponse = "";
+      let accumulatedContent = "";
 
       while (true) {
         const { done, value } = await reader.read();
+        
         if (done) break;
         
         const chunk = decoder.decode(value, { stream: true });
-        fullResponse += chunk;
-      }
-
-      // 尝试解析JSON并格式化
-      let formattedContent = fullResponse;
-      try {
-        // 清理可能存在的代码块标记
-        let cleanedResponse = fullResponse
-          .replace(/^```json\s*/m, '')
-          .replace(/^```\s*/m, '')
-          .replace(/\s*```\s*$/m, '')
-          .trim();
+        accumulatedContent += chunk;
         
-        // 尝试直接解析
-        let data = null;
-        try {
-          data = JSON.parse(cleanedResponse);
-        } catch (e1) {
-          // 如果直接解析失败，尝试提取 JSON 部分
-          const jsonMatch = cleanedResponse.match(/\{[\s\S]*\}/);
-          if (jsonMatch) {
-            try {
-              data = JSON.parse(jsonMatch[0]);
-            } catch (e2) {
-              // 提取失败
-            }
-          }
-        }
-        
-        // 如果成功解析到数据，并且包含 summary 或 segments，则格式化
-        if (data && (data.summary || data.segments)) {
-          formattedContent = formatAnalysisResult(data);
-        }
-      } catch (e) {
-        // 如果不是JSON，直接使用原始文本
-      }
-
-      // 使用打字机效果逐字显示格式化后的内容
-      let displayedText = "";
-      const chars = formattedContent.split("");
-      
-      for (let i = 0; i < chars.length; i++) {
-        displayedText += chars[i];
+        // 立即更新UI，实现真正的流式输出
         setMessages(prev => prev.map(msg =>
-          msg.id === replyId ? { ...msg, content: displayedText } : msg
+          msg.id === replyId ? { ...msg, content: accumulatedContent } : msg
         ));
-        // 控制打字速度，中文字符稍慢
-        const delay = chars[i].match(/[\u4e00-\u9fa5]/) ? 30 : 15;
-        await new Promise(resolve => setTimeout(resolve, delay));
+        
+        // 添加微小延迟，避免UI更新过快
+        await new Promise(resolve => setTimeout(resolve, 10));
       }
 
     } catch (error) {
