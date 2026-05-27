@@ -8,7 +8,7 @@ import ChatBubble from "./ChatBubble";
 /**
  * 主内容区域组件 - AI 聊天界面
  */
-function MainContent({ uploadedVideo, initialSegments, onJumpToTime, onSummaryGenerated, onMessagesUpdate }) {
+function MainContent({ uploadedVideo, initialSegments, onJumpToTime, onSummaryGenerated, onMessagesUpdate, showNotes, onToggleNotes }) {
   // 状态管理：消息列表
   const [messages, setMessages] = useState([]);
   // 状态管理：当前输入的问题
@@ -396,8 +396,37 @@ function MainContent({ uploadedVideo, initialSegments, onJumpToTime, onSummaryGe
             </div>
             <span style={{ fontWeight: '500', color: '#1f2937', fontSize: '14px' }}>AI 视频分析</span>
           </div>
-          <div style={{ fontSize: '12px', color: '#9ca3af' }}>
-            {uploadedVideo ? `已上传: ${uploadedVideo.filename}` : '请上传视频开始分析'}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ fontSize: '12px', color: '#9ca3af' }}>
+              {uploadedVideo ? `已上传: ${uploadedVideo.filename}` : '请上传视频开始分析'}
+            </div>
+            <button
+              onClick={onToggleNotes}
+              style={{
+                width: '32px',
+                height: '32px',
+                borderRadius: '8px',
+                backgroundColor: showNotes ? '#e0e7ff' : '#f3f4f6',
+                border: 'none',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                color: showNotes ? '#4f46e5' : '#6b7280'
+              }}
+              title={showNotes ? '收起笔记' : '展开笔记'}
+            >
+              {showNotes ? (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polyline points="15 18 9 12 15 6" />
+                </svg>
+              ) : (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polyline points="9 18 15 12 9 6" />
+                </svg>
+              )}
+            </button>
           </div>
         </div>
       </header>

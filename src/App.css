@@ -4,6 +4,7 @@
   height: 100vh;
   width: 100%;
   overflow: hidden;
+  background: var(--bg, #0f1115);
 }
 
 /* 自定义滚动条样式 */
@@ -53,6 +54,7 @@
 .sidebar-left {
   background: var(--bg-surface);
   border-bottom: 1px solid var(--border);
+  transition: all 0.3s ease;
 }
 
 @media (min-width: 768px) {
@@ -71,6 +73,19 @@
 .sidebar-right {
   background: var(--bg-surface);
   border-top: 1px solid var(--border);
+  transition: all 0.3s ease;
+  animation: slideIn 0.3s ease;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 @media (min-width: 768px) {

@@ -15,6 +15,7 @@ function App() {
   const [notes, setNotes] = useState('')
   const [conversationSummary, setConversationSummary] = useState('')
   const [messages, setMessages] = useState([])
+  const [showNotes, setShowNotes] = useState(false)
 
   const handleVideoUpload = useCallback((videoData) => {
     setUploadedVideo(videoData)
@@ -46,6 +47,10 @@ function App() {
     setMessages(newMessages)
   }, [])
 
+  const handleToggleNotes = useCallback(() => {
+    setShowNotes(prev => !prev)
+  }, [])
+
   return (
     <div className="app-container">
       {/* 左侧边栏 - 视频上传和控制 */}
@@ -64,15 +69,19 @@ function App() {
         onJumpToTime={handleJumpToTime}
         onSummaryGenerated={handleSummaryGenerated}
         onMessagesUpdate={handleMessagesUpdate}
+        showNotes={showNotes}
+        onToggleNotes={handleToggleNotes}
       />
 
-      {/* 右侧边栏 - 笔记和导出 */}
-      <SidebarRight 
-        notes={notes}
-        onNotesChange={handleNotesChange}
-        conversationSummary={conversationSummary}
-        messages={messages}
-      />
+      {/* 右侧边栏 - 笔记和导出（根据 showNotes 状态显示/隐藏） */}
+      {showNotes && (
+        <SidebarRight 
+          notes={notes}
+          onNotesChange={handleNotesChange}
+          conversationSummary={conversationSummary}
+          messages={messages}
+        />
+      )}
     </div>
   )
 }
