@@ -9,6 +9,7 @@ import { SERVER_URL } from '../config';
 export default function VideoPlayer({ video, isUploading, uploadProgress, onVideoReady, onChaptersGenerated, previewImage, jumpToTime, onTimeUpdate }) {
   const videoRef = useRef(null);
   const playerRef = useRef(null);
+  const lastJumpTime = useRef(null);  // 记录上次处理的跳转时间
   const [error, setError] = useState(null);
   const [isReady, setIsReady] = useState(false);
   const [isVideoLoaded, setIsVideoLoaded] = useState(false);
@@ -236,9 +237,13 @@ export default function VideoPlayer({ video, isUploading, uploadProgress, onVide
     if (jumpToTime !== null && playerRef.current && !playerRef.current.isDisposed()) {
       const timeInSeconds = parseFloat(jumpToTime);
       if (!isNaN(timeInSeconds)) {
-        console.log('[VideoPlayer] 跳转到时间:', timeInSeconds, '秒');
-        playerRef.current.currentTime(timeInSeconds);
-        playerRef.current.play();
+        // 使用 ref 防止重复处理相同的跳转请求
+        if (lastJumpTime.current !== timeInSeconds) {
+          console.log('[VideoPlayer] 跳转到时间:', timeInSeconds, '秒');
+          playerRef.current.currentTime(timeInSeconds);
+          playerRef.current.play();
+          lastJumpTime.current = timeInSeconds;
+        }
       }
     }
   }, [jumpToTime]);

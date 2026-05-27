@@ -29,8 +29,6 @@ function App() {
 
   const handleJumpToTime = useCallback((timeInSeconds) => {
     setJumpToTime(timeInSeconds)
-    // 重置状态以便下次跳转
-    setTimeout(() => setJumpToTime(null), 100)
   }, [])
 
   return (

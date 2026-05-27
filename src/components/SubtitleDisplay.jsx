@@ -8,9 +8,19 @@ import React from 'react'
  */
 function SubtitleDisplay({ subtitles, currentTime, onJumpToTime }) {
   // 找到当前播放位置对应的字幕索引
-  const highlightedIndex = subtitles.findIndex(sub => 
-    currentTime >= sub.startTime && currentTime <= sub.endTime
-  );
+  // 优先匹配开始时间等于当前时间的字幕（解决时间边界重合问题）
+  const highlightedIndex = subtitles.findIndex(sub => {
+    const isInRange = currentTime >= sub.startTime && currentTime <= sub.endTime;
+    const isExactStart = Math.abs(currentTime - sub.startTime) < 0.01; // 精确匹配开始时间
+    
+    // 如果当前时间正好是某个字幕的开始时间，优先匹配这个字幕
+    if (isExactStart) {
+      return true;
+    }
+    
+    // 否则检查是否在时间范围内，但排除刚好在结束时间点的情况（避免重复匹配）
+    return isInRange && currentTime < sub.endTime;
+  });
 
   return (
     <div style={{
