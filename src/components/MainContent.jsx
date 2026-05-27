@@ -8,7 +8,7 @@ import ChatBubble from "./ChatBubble";
 /**
  * 主内容区域组件 - AI 聊天界面
  */
-function MainContent({ uploadedVideo, initialSegments, onJumpToTime }) {
+function MainContent({ uploadedVideo, initialSegments, onJumpToTime, onSummaryGenerated, onMessagesUpdate }) {
   // 状态管理：消息列表
   const [messages, setMessages] = useState([]);
   // 状态管理：当前输入的问题
@@ -128,6 +128,11 @@ function MainContent({ uploadedVideo, initialSegments, onJumpToTime }) {
         // 如果成功解析到数据，并且包含 summary 或 segments，则格式化
         if (data && (data.summary || data.segments)) {
           formattedContent = formatAnalysisResult(data);
+          
+          // 将总结内容传递给右侧笔记组件
+          if (data.summary && onSummaryGenerated) {
+            onSummaryGenerated(data.summary);
+          }
         }
       } catch (e) {
         // 如果不是JSON，直接使用原始文本
@@ -294,6 +299,15 @@ function MainContent({ uploadedVideo, initialSegments, onJumpToTime }) {
       messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
     }
   }, [messages, isLoading]);
+
+  /**
+   * 消息更新时通知父组件
+   */
+  useEffect(() => {
+    if (onMessagesUpdate) {
+      onMessagesUpdate(messages);
+    }
+  }, [messages, onMessagesUpdate]);
 
   /**
    * 页面加载后显示欢迎消息

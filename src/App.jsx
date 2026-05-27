@@ -12,6 +12,9 @@ function App() {
   const [uploadedVideo, setUploadedVideo] = useState(null)
   const [segments, setSegments] = useState(null)
   const [jumpToTime, setJumpToTime] = useState(null)
+  const [notes, setNotes] = useState('')
+  const [conversationSummary, setConversationSummary] = useState('')
+  const [messages, setMessages] = useState([])
 
   const handleVideoUpload = useCallback((videoData) => {
     setUploadedVideo(videoData)
@@ -31,6 +34,18 @@ function App() {
     setJumpToTime(timeInSeconds)
   }, [])
 
+  const handleNotesChange = useCallback((newNotes) => {
+    setNotes(newNotes)
+  }, [])
+
+  const handleSummaryGenerated = useCallback((summary) => {
+    setConversationSummary(summary)
+  }, [])
+
+  const handleMessagesUpdate = useCallback((newMessages) => {
+    setMessages(newMessages)
+  }, [])
+
   return (
     <div className="app-container">
       {/* 左侧边栏 - 视频上传和控制 */}
@@ -47,10 +62,17 @@ function App() {
         uploadedVideo={uploadedVideo} 
         initialSegments={segments}
         onJumpToTime={handleJumpToTime}
+        onSummaryGenerated={handleSummaryGenerated}
+        onMessagesUpdate={handleMessagesUpdate}
       />
 
       {/* 右侧边栏 - 笔记和导出 */}
-      <SidebarRight />
+      <SidebarRight 
+        notes={notes}
+        onNotesChange={handleNotesChange}
+        conversationSummary={conversationSummary}
+        messages={messages}
+      />
     </div>
   )
 }

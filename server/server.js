@@ -8,7 +8,7 @@ import { env } from 'process';
 import { fileURLToPath } from 'url';
 import { Readable } from 'stream';
 import { transcribeVideo } from './whisper-service.js';
-import { analyzeTranscript, analyzeTranscriptStream, generateChapterVTT, chatWithHistoryStream } from './ai-service.js';
+import { analyzeTranscript, analyzeTranscriptStream, generateChapterVTT, chatWithHistoryStream, chatWithHistory } from './ai-service.js';
 import { convertToHLS } from './hls-service.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -362,6 +362,57 @@ app.post('/api/chat', async (req, res) => {
   } catch (error) {
     log(`[API] 聊天请求失败: ${error.message}`);
     res.status(500).json({ error: '聊天失败' });
+  }
+});
+
+/**
+ * 总结API - 根据对话历史生成总结（流式输出）
+ */
+app.post('/api/summarize', async (req, res) => {
+  try {
+    const { messages } = req.body;
+
+    if (!messages || !Array.isArray(messages)) {
+      return res.status(400).json({ success: false, error: '缺少 messages 参数或格式不正确' });
+    }
+
+    log(`[API] 接收到总结请求，消息数量: ${messages.length}`);
+
+    // 构建总结提示
+    const chatMessages = [];
+
+    // 添加系统提示
+    chatMessages.push({
+      role: 'system',
+      content: '你是一个专业的总结助手，请对以下对话内容进行简明扼要的总结。总结需要包含：1) 主要讨论的主题；2) 关键要点；3) 得出的结论或建议。请使用中文，保持简洁清晰。'
+    });
+
+    // 将消息历史转换为文本
+    const conversationText = messages.map(msg => {
+      const role = msg.role === 'assistant' ? '助手' : '用户';
+      return `${role}: ${msg.content}`;
+    }).join('\n\n');
+
+    // 添加总结请求
+    chatMessages.push({
+      role: 'user',
+      content: `请总结以下对话内容：\n\n${conversationText}`
+    });
+
+    // 调用 AI 进行总结（流式）
+    const webStream = await chatWithHistoryStream(chatMessages);
+
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Transfer-Encoding', 'chunked');
+
+    // 将 Web Stream 转换为 Node.js Stream 并管道到响应
+    const nodeReadable = Readable.fromWeb(webStream);
+    nodeReadable.pipe(res);
+
+    log(`[API] 总结流式响应已发送`);
+  } catch (error) {
+    log(`[API] 总结请求失败: ${error.message}`);
+    res.status(500).json({ success: false, error: '总结失败' });
   }
 });
 

@@ -258,6 +258,45 @@ export const chatWithHistoryStream = async (messages) => {
 };
 
 /**
+ * 聊天非流式版本 - 用于总结等需要完整响应的场景
+ */
+export const chatWithHistory = async (messages) => {
+    const apiKey = env.DEEPSEEK_API_KEY;
+
+    if (!apiKey || apiKey.trim() === '') {
+        console.log('[AI聊天] 未配置 DEEPSEEK_API_KEY，使用模拟回复');
+        const userMessage = messages[messages.length - 1];
+        const userContent = userMessage?.content || '';
+        
+        if (userContent.includes('总结')) {
+            return "这是一个模拟总结回复。由于未配置 API Key，无法调用真实的 AI 服务。在实际应用中，这里会返回由 AI 生成的对话总结。";
+        }
+        return `收到您的问题："${userContent}"\n\n这是一个模拟回复。`;
+    }
+
+    const openai = new OpenAI({
+        baseURL: 'https://api.deepseek.com',
+        apiKey: apiKey
+    });
+
+    try {
+        const requestParams = {
+            model: "deepseek-chat",
+            messages: messages,
+            temperature: 0.7,
+            stream: false
+        };
+        console.log('[AI聊天] 请求已发送（非流式），消息数量:', messages.length);
+
+        const response = await openai.chat.completions.create(requestParams);
+        return response.choices[0]?.message?.content || '';
+    } catch (error) {
+        console.error('[AI聊天] 失败:', error);
+        throw error;
+    }
+};
+
+/**
  * 生成模拟聊天流式响应
  */
 function generateMockChatStream(messages) {

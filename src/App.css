@@ -547,3 +547,120 @@
   color: var(--accent);
   border-radius: 4px;
 }
+
+/* 笔记编辑器样式 */
+.editor-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  padding: 0.5rem;
+  gap: 0.25rem;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.toolbar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border: none;
+  background: transparent;
+  color: var(--text-h);
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.15s ease-out;
+}
+
+.toolbar-btn:hover {
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+
+.toolbar-btn:active {
+  background: var(--accent);
+  color: white;
+}
+
+.toolbar-divider {
+  width: 1px;
+  height: 1.5rem;
+  background: var(--border);
+  margin: 0 0.25rem;
+}
+
+.notes-textarea {
+  flex: 1;
+  width: 100%;
+  padding: 0.75rem;
+  border: none;
+  background: var(--bg-surface);
+  color: var(--text-h);
+  font-family: monospace;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  resize: none;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.notes-textarea::placeholder {
+  color: var(--text-muted);
+}
+
+.notes-content {
+  flex: 1;
+  overflow: hidden;
+}
+
+.notes-preview {
+  height: 100%;
+  overflow-y: auto;
+  padding: 1rem;
+  color: var(--text);
+  background: var(--bg-surface);
+  border-radius: 0.5rem;
+}
+
+.markdown-body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-size: 0.95rem;
+  line-height: 1.75;
+}
+
+.light-preview {
+  background: #ffffff;
+  color: #000000;
+  border: 1px solid #e5e5e5;
+}
+
+.markdown-body :first-child {
+  margin-top: 0 !important;
+}
+
+.markdown-body :last-child {
+  margin-bottom: 0 !important;
+}
+
+.notes-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
