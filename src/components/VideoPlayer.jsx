@@ -6,7 +6,7 @@ import 'videojs-contrib-quality-menu';
 import 'videojs-contrib-quality-menu/dist/videojs-contrib-quality-menu.css';
 import { SERVER_URL } from '../config';
 
-export default function VideoPlayer({ video, isUploading, uploadProgress, onVideoReady, onChaptersGenerated, previewImage, jumpToTime }) {
+export default function VideoPlayer({ video, isUploading, uploadProgress, onVideoReady, onChaptersGenerated, previewImage, jumpToTime, onTimeUpdate }) {
   const videoRef = useRef(null);
   const playerRef = useRef(null);
   const [error, setError] = useState(null);
@@ -97,6 +97,14 @@ export default function VideoPlayer({ video, isUploading, uploadProgress, onVide
 
       player.on('canplay', handleCanPlay);
       player.on('error', handleError);
+      
+      // 时间更新事件：用于字幕高亮同步
+      const handleTimeUpdate = () => {
+        if (onTimeUpdate) {
+          onTimeUpdate(player.currentTime());
+        }
+      };
+      player.on('timeupdate', handleTimeUpdate);
       
       // 在播放器初始化时就添加 loadedmetadata 监听
       const handleMetadataInit = () => {
@@ -211,6 +219,7 @@ export default function VideoPlayer({ video, isUploading, uploadProgress, onVide
       return () => {
         player.off('canplay', handleCanPlay);
         player.off('error', handleError);
+        player.off('timeupdate', handleTimeUpdate);
         player.off('loadedmetadata', handleMetadataInit);
         if (!player.isDisposed()) {
           player.dispose();

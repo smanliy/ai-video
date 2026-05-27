@@ -4,13 +4,16 @@ import UploadDropzone from './UploadDropzone'
 import UploadProgress from './UploadProgress'
 import React from 'react';
 import VideoPlayer from '../VideoPlayer'
+import SubtitleDisplay from '../SubtitleDisplay'
 
-function SidebarLeft({ onVideoUpload, onVideoRemove, onSegmentsGenerated, jumpToTime }) {
+function SidebarLeft({ onVideoUpload, onVideoRemove, onSegmentsGenerated, jumpToTime, onJumpToTime }) {
   const [isDragging, setIsDragging] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState(null);
   const [uploadedVideo, setUploadedVideo] = useState(null);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [subtitles, setSubtitles] = useState([]);
 
   const recentVideos = [
     { name: '视频文件.mp4', date: '今天' },
@@ -43,6 +46,78 @@ function SidebarLeft({ onVideoUpload, onVideoRemove, onSegmentsGenerated, jumpTo
     }
   };
 
+  // 解析 VTT 字幕文件
+  const parseVTT = async (vttPath) => {
+    try {
+      const fullPath = vttPath.startsWith('http') ? vttPath : `${SERVER_URL}${vttPath}`;
+      console.log('[SidebarLeft] 开始解析字幕文件:', fullPath);
+      
+      const response = await fetch(fullPath);
+      const text = await response.text();
+      console.log('[SidebarLeft] VTT文件内容:', text);
+      
+      const lines = text.split('\n');
+      const parsedSubtitles = [];
+      let i = 0;
+      
+      while (i < lines.length) {
+        // 跳过 WEBVTT 头和空行
+        if (lines[i].trim() === '' || lines[i].startsWith('WEBVTT')) {
+          i++;
+          continue;
+        }
+        
+        // 解析时间戳行
+        const timeLine = lines[i].trim();
+        console.log('[SidebarLeft] 检查行:', timeLine);
+        
+        // 支持多种时间格式
+        const timeMatch = timeLine.match(/^(\d{2}):(\d{2}):(\d{2})\.(\d{3}) --> (\d{2}):(\d{2}):(\d{2})\.(\d{3})/) ||
+                         timeLine.match(/^(\d{2}):(\d{2})\.(\d{3}) --> (\d{2}):(\d{2})\.(\d{3})/) ||
+                         timeLine.match(/^(\d{2}):(\d{2}):(\d{2}) --> (\d{2}):(\d{2}):(\d{2})/);
+        
+        if (timeMatch) {
+          console.log('[SidebarLeft] 匹配到时间戳:', timeMatch);
+          
+          let startTime, endTime;
+          if (timeMatch.length === 9) {
+            // 格式: 00:00:00.000 --> 00:00:00.000
+            startTime = parseInt(timeMatch[1]) * 3600 + parseInt(timeMatch[2]) * 60 + parseInt(timeMatch[3]) + parseInt(timeMatch[4]) / 1000;
+            endTime = parseInt(timeMatch[5]) * 3600 + parseInt(timeMatch[6]) * 60 + parseInt(timeMatch[7]) + parseInt(timeMatch[8]) / 1000;
+          } else if (timeMatch.length === 7) {
+            // 格式: 00:00.000 --> 00:00.000 (没有小时)
+            startTime = parseInt(timeMatch[1]) * 60 + parseInt(timeMatch[2]) + parseInt(timeMatch[3]) / 1000;
+            endTime = parseInt(timeMatch[4]) * 60 + parseInt(timeMatch[5]) + parseInt(timeMatch[6]) / 1000;
+          } else if (timeMatch.length === 7) {
+            // 格式: 00:00:00 --> 00:00:00 (没有毫秒)
+            startTime = parseInt(timeMatch[1]) * 3600 + parseInt(timeMatch[2]) * 60 + parseInt(timeMatch[3]);
+            endTime = parseInt(timeMatch[4]) * 3600 + parseInt(timeMatch[5]) * 60 + parseInt(timeMatch[6]);
+          }
+          
+          i++;
+          // 读取字幕文本（可能跨多行）
+          let textContent = '';
+          while (i < lines.length && lines[i].trim() !== '' && !lines[i].includes('-->')) {
+            textContent += (textContent ? ' ' : '') + lines[i].trim();
+            i++;
+          }
+          
+          if (textContent.trim()) {
+            parsedSubtitles.push({ startTime, endTime, text: textContent.trim() });
+            console.log('[SidebarLeft] 添加字幕:', { startTime, endTime, text: textContent.trim() });
+          }
+        } else {
+          i++;
+        }
+      }
+      
+      setSubtitles(parsedSubtitles);
+      console.log('[SidebarLeft] 解析完成，共', parsedSubtitles.length, '条字幕');
+    } catch (error) {
+      console.error('[SidebarLeft] 解析字幕失败:', error);
+    }
+  };
+
   const handleFileUpload = async (file) => {
     console.log('=== 视频文件信息 ===');
     console.log('文件名:', file.name);
@@ -54,6 +129,7 @@ function SidebarLeft({ onVideoUpload, onVideoRemove, onSegmentsGenerated, jumpTo
     setIsUploading(true);
     setUploadProgress(0);
     setUploadStatus(null);
+    setSubtitles([]);
 
     const formData = new FormData()
     formData.append('video', file)
@@ -77,6 +153,12 @@ function SidebarLeft({ onVideoUpload, onVideoRemove, onSegmentsGenerated, jumpTo
           hls: result.hls || null,
         };
         setUploadedVideo(videoData);
+        
+        // 解析字幕
+        if (videoData.vttPath) {
+          parseVTT(videoData.vttPath);
+        }
+        
         if (onVideoUpload) {
           onVideoUpload(videoData);
         }
@@ -98,6 +180,18 @@ function SidebarLeft({ onVideoUpload, onVideoRemove, onSegmentsGenerated, jumpTo
 
     setIsUploading(false);
     setUploadProgress(100);
+  };
+
+  // 处理时间更新
+  const handleTimeUpdate = (time) => {
+    setCurrentTime(time);
+  };
+
+  // 处理字幕点击跳转
+  const handleSubtitleClick = (time) => {
+    if (onJumpToTime) {
+      onJumpToTime(time);
+    }
   };
 
   const formatFileSize = (bytes) => {
@@ -130,11 +224,19 @@ function SidebarLeft({ onVideoUpload, onVideoRemove, onSegmentsGenerated, jumpTo
             uploadProgress={uploadProgress}
             onChaptersGenerated={onSegmentsGenerated}
             jumpToTime={jumpToTime}
+            onTimeUpdate={handleTimeUpdate}
           />
           <div className="video-info">
             <p className="video-name">{uploadedVideo.filename}</p>
             <p className="video-size">{formatFileSize(uploadedVideo.size)}</p>
           </div>
+          {subtitles.length > 0 && (
+            <SubtitleDisplay 
+              subtitles={subtitles} 
+              currentTime={currentTime} 
+              onJumpToTime={handleSubtitleClick}
+            />
+          )}
           {uploadedVideo.transcript && uploadedVideo.transcript !== '语音识别失败' && (
             <div className="video-transcript">
               <h4>语音识别结果</h4>

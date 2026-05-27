@@ -41,6 +41,7 @@ function App() {
         onVideoRemove={handleVideoRemove}
         onSegmentsGenerated={handleSegmentsGenerated}
         jumpToTime={jumpToTime}
+        onJumpToTime={handleJumpToTime}
       />
 
       {/* 中间主内容区 - AI聊天界面 */}
