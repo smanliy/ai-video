@@ -237,12 +237,6 @@ function SidebarLeft({ onVideoUpload, onVideoRemove, onSegmentsGenerated, jumpTo
               onJumpToTime={handleSubtitleClick}
             />
           )}
-          {uploadedVideo.transcript && uploadedVideo.transcript !== '语音识别失败' && (
-            <div className="video-transcript">
-              <h4>语音识别结果</h4>
-              <p>{uploadedVideo.transcript}</p>
-            </div>
-          )}
           <button className="reupload-btn" onClick={handleReupload}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
