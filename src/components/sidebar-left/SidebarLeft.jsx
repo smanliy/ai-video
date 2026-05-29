@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { SERVER_URL } from '../../config'
+import { SERVER_URL, STATIC_BASE_URL } from '../../config'
 import UploadDropzone from './UploadDropzone'
 import UploadProgress from './UploadProgress'
 import UploadStatus from './UploadStatus'
@@ -53,7 +53,7 @@ function SidebarLeft({ onVideoUpload, onVideoRemove, onSegmentsGenerated, jumpTo
   // 解析 VTT 字幕文件
   const parseVTT = async (vttPath) => {
     try {
-      const fullPath = vttPath.startsWith('http') ? vttPath : `${SERVER_URL}${vttPath}`;
+      const fullPath = vttPath.startsWith('http') ? vttPath : `${STATIC_BASE_URL}${vttPath}`;
       console.log('[SidebarLeft] 开始解析字幕文件:', fullPath);
       
       const response = await fetch(fullPath);
@@ -124,14 +124,21 @@ function SidebarLeft({ onVideoUpload, onVideoRemove, onSegmentsGenerated, jumpTo
 
   // 建立 WebSocket 连接
   const connectWebSocket = (fileId) => {
+    // 生产环境不支持 WebSocket，直接跳过
+    if (import.meta.env.PROD || import.meta.env.MODE === 'production') {
+      console.log('[WebSocket] 生产环境不支持 WebSocket，跳过连接');
+      setUploadProgress(100);
+      setUploadPhase('complete');
+      return;
+    }
+
     // 关闭旧连接
     if (wsConnection) {
       wsConnection.close();
     }
 
-    // 创建 WebSocket 连接
-    const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
-    const wsUrl = `${protocol}${SERVER_URL.replace('http://', '').replace('https://', '')}/`;
+    // 创建 WebSocket 连接（仅开发环境）
+    const wsUrl = `ws://localhost:3000/`;
     const ws = new WebSocket(wsUrl);
 
     ws.onopen = () => {
@@ -223,7 +230,7 @@ function SidebarLeft({ onVideoUpload, onVideoRemove, onSegmentsGenerated, jumpTo
           connectWebSocket(result.fileId);
 
           const videoData = {
-            url: `${SERVER_URL}${result.path}`,
+            url: `${STATIC_BASE_URL}${result.path}`,
             filename: result.filename,
             size: result.size,
             fileId: result.fileId,

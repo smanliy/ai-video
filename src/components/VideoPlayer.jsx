@@ -4,7 +4,7 @@ import 'video.js/dist/video-js.css';
 import '@videojs/http-streaming';
 import 'videojs-contrib-quality-menu';
 import 'videojs-contrib-quality-menu/dist/videojs-contrib-quality-menu.css';
-import { SERVER_URL } from '../config';
+import { SERVER_URL, STATIC_BASE_URL } from '../config';
 
 export default function VideoPlayer({ video, isUploading, uploadProgress, onVideoReady, onChaptersGenerated, previewImage, jumpToTime, onTimeUpdate }) {
   const videoRef = useRef(null);
@@ -127,7 +127,7 @@ export default function VideoPlayer({ video, isUploading, uploadProgress, onVide
           .then(data => {
             console.log('[VideoPlayer] 章节生成返回:', data);
             if (data.success) {
-              const chapterSrc = data.chapterVttPath.startsWith('http') ? data.chapterVttPath : SERVER_URL + data.chapterVttPath;
+              const chapterSrc = data.chapterVttPath.startsWith('http') ? data.chapterVttPath : STATIC_BASE_URL + data.chapterVttPath;
               player.addRemoteTextTrack({
                 kind: 'chapters',
                 src: chapterSrc,
@@ -161,7 +161,7 @@ export default function VideoPlayer({ video, isUploading, uploadProgress, onVide
       }
       
       const type = video.hls ? 'application/x-mpegURL' : 'video/mp4';
-      const videoSrc = src.startsWith('http') ? src : SERVER_URL + src;
+      const videoSrc = src.startsWith('http') ? src : STATIC_BASE_URL + src;
       
       console.log('[VideoPlayer] 设置视频源:', videoSrc);
       console.log('[VideoPlayer] 当前视频源:', player.currentSrc());
@@ -170,7 +170,7 @@ export default function VideoPlayer({ video, isUploading, uploadProgress, onVide
 
       if (video.vttPath) {
         console.log('[VideoPlayer] 设置字幕源:', video.vttPath);
-        const vttSrc = video.vttPath.startsWith('http') ? video.vttPath : SERVER_URL + video.vttPath;
+        const vttSrc = video.vttPath.startsWith('http') ? video.vttPath : STATIC_BASE_URL + video.vttPath;
         player.addRemoteTextTrack({
           kind: 'subtitles',
           src: vttSrc,
