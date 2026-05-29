@@ -13,8 +13,11 @@
   ],
   "routes": [
     { "src": "/upload/video", "dest": "/api/upload.js" },
-    { "src": "/analyze", "dest": "/api/analyze.js" },
-    { "src": "/chat", "dest": "/api/chat.js" },
+    { "src": "/api/chat", "dest": "/api/chat.js" },
+    { "src": "/api/analyze", "dest": "/api/analyze.js" },
+    { "src": "/api/analyze/stream", "dest": "/api/analyze.js" },
+    { "src": "/api/generate-chapters", "dest": "/api/generate-chapters.js" },
+    { "src": "/api/summarize", "dest": "/api/chat.js" },
     { "src": "/(.*)", "dest": "/index.html" }
   ]
 }
