@@ -15,8 +15,9 @@ import { convertToHLS } from './hls-service.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const envPath = path.join(__dirname, '..', '.env');
 
+// 加载 .env 文件
+const envPath = path.join(__dirname, '..', '.env');
 if (fs.existsSync(envPath)) {
   const envContent = fs.readFileSync(envPath, 'utf8');
   const lines = envContent.split('\n');
@@ -30,6 +31,23 @@ if (fs.existsSync(envPath)) {
     }
   }
   console.log(`[INFO] 已加载环境变量文件: ${envPath}`);
+}
+
+// 加载 .env.local 文件（优先级更高）
+const envLocalPath = path.join(__dirname, '..', '.env.local');
+if (fs.existsSync(envLocalPath)) {
+  const envContent = fs.readFileSync(envLocalPath, 'utf8');
+  const lines = envContent.split('\n');
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed && !trimmed.startsWith('#')) {
+      const [key, value] = trimmed.split('=', 2);
+      if (key && value) {
+        env[key.trim()] = value.trim();
+      }
+    }
+  }
+  console.log(`[INFO] 已加载环境变量文件: ${envLocalPath}`);
 }
 
 const app = express();
