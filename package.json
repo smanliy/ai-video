@@ -10,10 +10,12 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@videojs/http-streaming": "^3.17.4",
     "openai": "^6.37.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "react-markdown": "^10.1.0",
+    "videojs-contrib-quality-menu": "^1.0.4",
     "whisper-node": "^1.1.1",
     "ws": "^8.21.0"
   },
