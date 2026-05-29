@@ -7,6 +7,8 @@ import fs from 'fs';
 import { env } from 'process';
 import { fileURLToPath } from 'url';
 import { Readable } from 'stream';
+import { createServer } from 'http';
+import { WebSocketServer, WebSocket } from 'ws';
 import { transcribeVideo } from './whisper-service.js';
 import { analyzeTranscript, analyzeTranscriptStream, generateChapterVTT, chatWithHistoryStream, chatWithHistory } from './ai-service.js';
 import { convertToHLS } from './hls-service.js';
@@ -32,6 +34,60 @@ if (fs.existsSync(envPath)) {
 
 const app = express();
 const PORT = env.PORT || 3000;
+
+// 存储 WebSocket 连接（fileId -> ws）
+const wsConnections = new Map();
+
+// 创建 HTTP 服务器
+const server = createServer(app);
+
+// 创建 WebSocket 服务器
+const wss = new WebSocketServer({ server });
+
+wss.on('connection', (ws) => {
+  log('WebSocket 客户端已连接');
+
+  ws.on('message', (message) => {
+    try {
+      const data = JSON.parse(message.toString());
+      if (data.type === 'register' && data.fileId) {
+        wsConnections.set(data.fileId, ws);
+        log(`WebSocket 已注册 fileId: ${data.fileId}`);
+
+        // 设置连接关闭时清理
+        ws.on('close', () => {
+          wsConnections.delete(data.fileId);
+          log(`WebSocket 连接已断开，fileId: ${data.fileId}`);
+        });
+      }
+    } catch (error) {
+      log(`WebSocket 消息解析错误: ${error.message}`);
+    }
+  });
+
+  ws.on('error', (error) => {
+    log(`WebSocket 错误: ${error.message}`);
+  });
+
+  ws.on('close', () => {
+    log('WebSocket 客户端已断开连接');
+  });
+});
+
+// 发送进度消息
+const sendProgress = (fileId, phase, percentage, message) => {
+  const ws = wsConnections.get(fileId);
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    const progressData = {
+      fileId,
+      phase,
+      percentage,
+      message: message || ''
+    };
+    ws.send(JSON.stringify(progressData));
+    log(`[进度推送] ${fileId}: ${phase} - ${percentage}%`);
+  }
+};
 
 const ALLOWED_MIME_TYPES = [
   'video/mp4',
@@ -125,12 +181,20 @@ app.post('/upload/video', upload.single('video'), async (req, res) => {
     log(`文件ID: ${fileId}`);
     log(`保存路径: ${newVideoPath}`);
 
+    // 上传完成，开始服务器处理阶段
+    sendProgress(fileId, 'uploading', 30, '文件上传完成，开始处理...');
+
     // 并发执行：语音识别 和 HLS转码
     log(`--- 并发任务开始 ---`);
+
+    // 转码阶段
+    sendProgress(fileId, 'transcoding', 40, '开始转码...');
+
     const [transcript, hlsData] = await Promise.all([
       // 任务1：语音识别（生成字幕）
       transcribeVideo(newVideoPath, subtitleDir)
         .then(result => {
+          sendProgress(fileId, 'transcribing', 65, '语音识别完成');
           log(`语音识别成功，字幕长度: ${result.length} 字符`);
           log(`字幕VTT已保存到: ${subtitleDir}`);
           return result;
@@ -143,6 +207,7 @@ app.post('/upload/video', upload.single('video'), async (req, res) => {
       // 任务2：HLS转码（生成多清晰度流）
       convertToHLS(newVideoPath, baseDir)
         .then(result => {
+          sendProgress(fileId, 'transcoding', 55, 'HLS转码完成');
           log(`HLS转码成功，生成 master.m3u8: ${result.masterPlaylistUrl}`);
           log(`清晰度级别: ${result.streams.map(s => s.quality).join(', ')}`);
           return result;
@@ -153,7 +218,11 @@ app.post('/upload/video', upload.single('video'), async (req, res) => {
           return null;
         })
     ]);
+
     log(`--- 并发任务完成 ---`);
+
+    // 分析阶段
+    sendProgress(fileId, 'analyzing', 85, '正在分析视频内容...');
 
     const response = {
       success: true,
@@ -169,6 +238,9 @@ app.post('/upload/video', upload.single('video'), async (req, res) => {
         streams: hlsData.streams
       } : null
     };
+
+    // 完成阶段
+    sendProgress(fileId, 'done', 100, '处理完成');
 
     log(`=== 视频上传完成 ===`);
     log(`返回字段: fileId, vttPath, transcript, hls`);
@@ -416,8 +488,9 @@ app.post('/api/summarize', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   log(`服务器运行在 http://localhost:${PORT}`);
+  log(`WebSocket 服务器已启动`);
   log(`上传目录: ${UPLOAD_DIR}`);
   log(`静态文件目录: ${path.join(__dirname, 'uploads')}`);
   log('支持的视频格式: MP4, WebM, MOV');

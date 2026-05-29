@@ -1,7 +1,8 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { SERVER_URL } from '../../config'
 import UploadDropzone from './UploadDropzone'
 import UploadProgress from './UploadProgress'
+import UploadStatus from './UploadStatus'
 import React from 'react';
 import VideoPlayer from '../VideoPlayer'
 import SubtitleDisplay from '../SubtitleDisplay'
@@ -14,6 +15,9 @@ function SidebarLeft({ onVideoUpload, onVideoRemove, onSegmentsGenerated, jumpTo
   const [uploadedVideo, setUploadedVideo] = useState(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [subtitles, setSubtitles] = useState([]);
+  const [uploadPhase, setUploadPhase] = useState(null); // 'uploading', 'transcoding', 'transcribing', 'analyzing', 'done'
+  const [uploadingFile, setUploadingFile] = useState(null);
+  const [wsConnection, setWsConnection] = useState(null); // WebSocket 连接
 
   const recentVideos = [
     { name: '视频文件.mp4', date: '今天' },
@@ -118,7 +122,66 @@ function SidebarLeft({ onVideoUpload, onVideoRemove, onSegmentsGenerated, jumpTo
     }
   };
 
-  const handleFileUpload = async (file) => {
+  // 建立 WebSocket 连接
+  const connectWebSocket = (fileId) => {
+    // 关闭旧连接
+    if (wsConnection) {
+      wsConnection.close();
+    }
+
+    // 创建 WebSocket 连接
+    const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+    const wsUrl = `${protocol}${SERVER_URL.replace('http://', '').replace('https://', '')}/`;
+    const ws = new WebSocket(wsUrl);
+
+    ws.onopen = () => {
+      console.log('[WebSocket] 连接已建立');
+      // 注册 fileId
+      ws.send(JSON.stringify({ type: 'register', fileId }));
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const progressData = JSON.parse(event.data);
+        console.log('[WebSocket] 进度更新:', progressData);
+        
+        // 更新进度和阶段
+        setUploadProgress(progressData.percentage);
+        setUploadPhase(progressData.phase);
+      } catch (error) {
+        console.error('[WebSocket] 解析消息失败:', error);
+      }
+    };
+
+    ws.onerror = (error) => {
+      console.error('[WebSocket] 错误:', error);
+    };
+
+    ws.onclose = () => {
+      console.log('[WebSocket] 连接已关闭');
+      setWsConnection(null);
+    };
+
+    setWsConnection(ws);
+    return ws;
+  };
+
+  // 关闭 WebSocket 连接
+  const closeWebSocket = () => {
+    if (wsConnection) {
+      wsConnection.close();
+      setWsConnection(null);
+    }
+  };
+
+  // 组件卸载时关闭 WebSocket
+  useEffect(() => {
+    return () => {
+      closeWebSocket();
+    };
+  }, []);
+
+  const handleFileUpload = (file) => {
     console.log('=== 视频文件信息 ===');
     console.log('文件名:', file.name);
     console.log('文件大小:', formatFileSize(file.size));
@@ -130,56 +193,113 @@ function SidebarLeft({ onVideoUpload, onVideoRemove, onSegmentsGenerated, jumpTo
     setUploadProgress(0);
     setUploadStatus(null);
     setSubtitles([]);
+    setUploadPhase('uploading');
+    setUploadingFile(file);
 
     const formData = new FormData()
     formData.append('video', file)
 
-    try {
-      const response = await fetch(`${SERVER_URL}/upload/video`, {
-        method: 'POST',
-        body: formData,
-      });
+    // 使用 XMLHttpRequest 实现精确上传进度
+    const xhr = new XMLHttpRequest();
+    
+    // 上传进度事件
+    xhr.upload.addEventListener('progress', (e) => {
+      if (e.lengthComputable) {
+        const uploadPercentage = (e.loaded / e.total) * 100;
+        // 上传阶段占总进度的 30%
+        const adjustedProgress = uploadPercentage * 0.3;
+        setUploadProgress(Math.round(adjustedProgress));
+        console.log(`[上传进度] ${e.loaded}/${e.total} (${adjustedProgress.toFixed(1)}%)`);
+      }
+    });
 
-      const result = await response.json()
+    // 上传成功完成
+    xhr.addEventListener('load', () => {
+      try {
+        const result = JSON.parse(xhr.responseText);
+        
+        if (xhr.status === 200) {
+          // 上传完成，建立 WebSocket 接收服务器处理进度
+          connectWebSocket(result.fileId);
 
-      if (response.ok) {
-        const videoData = {
-          url: `${SERVER_URL}${result.path}`,
-          filename: result.filename,
-          size: result.size,
-          fileId: result.fileId,
-          transcript: result.transcript || '',
-          vttPath: result.vttPath || '',
-          hls: result.hls || null,
-        };
-        setUploadedVideo(videoData);
-        
-        // 解析字幕
-        if (videoData.vttPath) {
-          parseVTT(videoData.vttPath);
+          const videoData = {
+            url: `${SERVER_URL}${result.path}`,
+            filename: result.filename,
+            size: result.size,
+            fileId: result.fileId,
+            transcript: result.transcript || '',
+            vttPath: result.vttPath || '',
+            hls: result.hls || null,
+          };
+
+          setUploadedVideo(videoData);
+
+          // 解析字幕
+          const parseSubtitles = async () => {
+            if (videoData.vttPath) {
+              await parseVTT(videoData.vttPath);
+            }
+
+            // 等待服务器推送完成状态，然后关闭 WebSocket
+            setTimeout(() => {
+              closeWebSocket();
+            }, 1000);
+
+            if (onVideoUpload) {
+              onVideoUpload(videoData);
+            }
+            setUploadStatus({ success: true, message: result.filename + ' 上传成功' });
+          };
+
+          parseSubtitles();
+        } else {
+          console.error('上传失败:', result.error);
+          closeWebSocket();
+          setUploadStatus({ success: false, message: result.error });
+          setTimeout(() => {
+            setUploadStatus(null);
+          }, 3000);
         }
-        
-        if (onVideoUpload) {
-          onVideoUpload(videoData);
-        }
-        setUploadStatus({ success: true, message: result.filename + ' 上传成功' });
-      } else {
-        console.error('上传失败:', result.error);
-        setUploadStatus({ success: false, message: result.error });
+      } catch (error) {
+        console.error('解析响应失败:', error);
+        closeWebSocket();
+        setUploadStatus({ success: false, message: '服务器响应格式错误' });
         setTimeout(() => {
           setUploadStatus(null);
         }, 3000);
       }
-    } catch (error) {
-      console.error('网络错误:', error);
+
+      setIsUploading(false);
+      setUploadingFile(null);
+    });
+
+    // 上传失败
+    xhr.addEventListener('error', () => {
+      console.error('网络错误');
+      closeWebSocket();
       setUploadStatus({ success: false, message: '网络连接失败，请检查服务器是否运行' });
       setTimeout(() => {
         setUploadStatus(null);
       }, 3000);
-    }
+      setIsUploading(false);
+      setUploadingFile(null);
+    });
 
-    setIsUploading(false);
-    setUploadProgress(100);
+    // 上传被中止
+    xhr.addEventListener('abort', () => {
+      console.log('上传被取消');
+      closeWebSocket();
+      setUploadStatus({ success: false, message: '上传已取消' });
+      setTimeout(() => {
+        setUploadStatus(null);
+      }, 3000);
+      setIsUploading(false);
+      setUploadingFile(null);
+    });
+
+    // 发送请求
+    xhr.open('POST', `${SERVER_URL}/upload/video`);
+    xhr.send(formData);
   };
 
   // 处理时间更新
@@ -211,8 +331,14 @@ function SidebarLeft({ onVideoUpload, onVideoRemove, onSegmentsGenerated, jumpTo
   };
 
   const renderUploadArea = () => {
-    if (isUploading) {
-      return <UploadProgress progress={uploadProgress} />;
+    if (isUploading && uploadingFile) {
+      return (
+        <UploadStatus 
+          file={uploadingFile} 
+          progress={uploadProgress} 
+          status={uploadPhase}
+        />
+      );
     }
 
     if (uploadedVideo) {

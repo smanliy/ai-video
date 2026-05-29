@@ -8,15 +8,15 @@ import OpenAI from "openai";
  * @returns {Object} 包含总结和分段的分析结果
  */
 export const analyzeTranscript = async (transcript, duration) => {
-    const apiKey = env.DEEPSEEK_API_KEY;
+    const apiKey = env.VITE_DEEPSEEK_API_KEY;
 
     console.log('\n=== [AI分析] 开始 ===');
     console.log(`[AI分析] 字幕长度: ${transcript.length} 字符`);
     console.log(`[AI分析] 视频时长: ${duration} 秒`);
 
     if (!apiKey || apiKey.trim() === '') {
-        console.log('[AI分析] 未配置 DEEPSEEK_API_KEY，使用模拟数据');
-       
+        console.log('[AI分析] 未配置 VITE_DEEPSEEK_API_KEY，使用模拟数据');
+
     }
 
     const openai = new OpenAI({
@@ -74,12 +74,12 @@ export const analyzeTranscript = async (transcript, duration) => {
  * @returns {ReadableStream} 流式响应
  */
 export const analyzeTranscriptStream = async (transcript) => {
-    const apiKey = env.DEEPSEEK_API_KEY;
+    const apiKey = env.VITE_DEEPSEEK_API_KEY;
 
     console.log('[AI分析] 流式分析开始');
 
     if (!apiKey || apiKey.trim() === '') {
-        console.log('[AI分析] 未配置 DEEPSEEK_API_KEY，使用模拟流式数据');
+        console.log('[AI分析] 未配置 VITE_DEEPSEEK_API_KEY，使用模拟流式数据');
         return generateMockStream(transcript);
     }
 
@@ -228,10 +228,10 @@ const generateMockResult = (transcript, duration) => {
  * 聊天流式版本
  */
 export const chatWithHistoryStream = async (messages) => {
-    const apiKey = env.DEEPSEEK_API_KEY;
+    const apiKey = env.VITE_DEEPSEEK_API_KEY;
 
     if (!apiKey || apiKey.trim() === '') {
-        console.log('[AI聊天] 未配置 DEEPSEEK_API_KEY，使用模拟聊天回复');
+        console.log('[AI聊天] 未配置 VITE_DEEPSEEK_API_KEY，使用模拟聊天回复');
         return generateMockChatStream(messages);
     }
 
@@ -261,13 +261,13 @@ export const chatWithHistoryStream = async (messages) => {
  * 聊天非流式版本 - 用于总结等需要完整响应的场景
  */
 export const chatWithHistory = async (messages) => {
-    const apiKey = env.DEEPSEEK_API_KEY;
+    const apiKey = env.VITE_DEEPSEEK_API_KEY;
 
     if (!apiKey || apiKey.trim() === '') {
-        console.log('[AI聊天] 未配置 DEEPSEEK_API_KEY，使用模拟回复');
+        console.log('[AI聊天] 未配置 VITE_DEEPSEEK_API_KEY，使用模拟回复');
         const userMessage = messages[messages.length - 1];
         const userContent = userMessage?.content || '';
-        
+
         if (userContent.includes('总结')) {
             return "这是一个模拟总结回复。由于未配置 API Key，无法调用真实的 AI 服务。在实际应用中，这里会返回由 AI 生成的对话总结。";
         }
