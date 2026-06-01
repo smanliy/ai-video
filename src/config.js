@@ -4,7 +4,7 @@ const isProduction = import.meta.env.PROD || import.meta.env.MODE === 'productio
 
 let serverUrl = import.meta.env.VITE_SERVER_URL;
 if (!serverUrl) {
-  serverUrl = isProduction ? '/api' : 'http://localhost:3000';
+  serverUrl = isProduction ? '' : 'http://localhost:3000';
 }
 
 export const SERVER_URL = serverUrl;
