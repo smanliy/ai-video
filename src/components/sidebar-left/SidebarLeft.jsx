@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+﻿import { useState, useRef, useEffect } from 'react'
 import { SERVER_URL, STATIC_BASE_URL } from '../../config'
 import UploadDropzone from './UploadDropzone'
 import UploadProgress from './UploadProgress'
@@ -17,12 +17,12 @@ function SidebarLeft({ onVideoUpload, onVideoRemove, onSegmentsGenerated, jumpTo
   const [subtitles, setSubtitles] = useState([]);
   const [uploadPhase, setUploadPhase] = useState(null); // 'uploading', 'transcoding', 'transcribing', 'analyzing', 'done'
   const [uploadingFile, setUploadingFile] = useState(null);
-  const [wsConnection, setWsConnection] = useState(null); // WebSocket 连接
+  const [wsConnection, setWsConnection] = useState(null); // WebSocket 杩炴帴
 
   const recentVideos = [
-    { name: '视频文件.mp4', date: '今天' },
-    { name: '会议录像.mov', date: '昨天' },
-    { name: '教程视频.webm', date: '3天前' },
+    { name: '瑙嗛鏂囦欢.mp4', date: '浠婂ぉ' },
+    { name: '浼氳褰曞儚.mov', date: '鏄ㄥぉ' },
+    { name: '鏁欑▼瑙嗛.webm', date: '3澶╁墠' },
   ]
 
   const handleDragOver = (e) => {
@@ -50,56 +50,78 @@ function SidebarLeft({ onVideoUpload, onVideoRemove, onSegmentsGenerated, jumpTo
     }
   };
 
-  // 解析 VTT 字幕文件
+  const applyVideoResult = async (result) => {
+    const videoData = {
+      url: `${STATIC_BASE_URL}${result.path}`,
+      filename: result.filename,
+      size: result.size,
+      fileId: result.fileId,
+      transcript: result.transcript || '',
+      vttPath: result.vttPath || '',
+      hls: result.hls || null,
+    };
+
+    setUploadedVideo(videoData);
+
+    if (videoData.vttPath && videoData.transcript) {
+      await parseVTT(videoData.vttPath);
+    }
+
+    if (onVideoUpload && videoData.transcript) {
+      onVideoUpload(videoData);
+    }
+  };
+
+  // 瑙ｆ瀽 VTT 瀛楀箷鏂囦欢
   const parseVTT = async (vttPath) => {
     try {
       const fullPath = vttPath.startsWith('http') ? vttPath : `${STATIC_BASE_URL}${vttPath}`;
-      console.log('[SidebarLeft] 开始解析字幕文件:', fullPath);
+      console.log('[SidebarLeft] 寮€濮嬭В鏋愬瓧骞曟枃浠?', fullPath);
       
       const response = await fetch(fullPath);
       const text = await response.text();
-      console.log('[SidebarLeft] VTT文件内容:', text);
+      console.log('[SidebarLeft] VTT鏂囦欢鍐呭:', text);
       
       const lines = text.split('\n');
       const parsedSubtitles = [];
       let i = 0;
       
       while (i < lines.length) {
-        // 跳过 WEBVTT 头和空行
+        // 璺宠繃 WEBVTT 澶村拰绌鸿
         if (lines[i].trim() === '' || lines[i].startsWith('WEBVTT')) {
           i++;
           continue;
         }
         
-        // 解析时间戳行
+        // 瑙ｆ瀽鏃堕棿鎴宠
         const timeLine = lines[i].trim();
-        console.log('[SidebarLeft] 检查行:', timeLine);
+        console.log('[SidebarLeft] 妫€鏌ヨ:', timeLine);
         
-        // 支持多种时间格式
+        // 鏀寔澶氱鏃堕棿鏍煎紡
         const timeMatch = timeLine.match(/^(\d{2}):(\d{2}):(\d{2})\.(\d{3}) --> (\d{2}):(\d{2}):(\d{2})\.(\d{3})/) ||
                          timeLine.match(/^(\d{2}):(\d{2})\.(\d{3}) --> (\d{2}):(\d{2})\.(\d{3})/) ||
                          timeLine.match(/^(\d{2}):(\d{2}):(\d{2}) --> (\d{2}):(\d{2}):(\d{2})/);
         
         if (timeMatch) {
-          console.log('[SidebarLeft] 匹配到时间戳:', timeMatch);
+          console.log('[SidebarLeft] 鍖归厤鍒版椂闂存埑:', timeMatch);
           
           let startTime, endTime;
           if (timeMatch.length === 9) {
-            // 格式: 00:00:00.000 --> 00:00:00.000
+            // 鏍煎紡: 00:00:00.000 --> 00:00:00.000
             startTime = parseInt(timeMatch[1]) * 3600 + parseInt(timeMatch[2]) * 60 + parseInt(timeMatch[3]) + parseInt(timeMatch[4]) / 1000;
             endTime = parseInt(timeMatch[5]) * 3600 + parseInt(timeMatch[6]) * 60 + parseInt(timeMatch[7]) + parseInt(timeMatch[8]) / 1000;
           } else if (timeMatch.length === 7) {
-            // 格式: 00:00.000 --> 00:00.000 (没有小时)
+            // 鏍煎紡: 00:00.000 --> 00:00.000 (娌℃湁灏忔椂)
             startTime = parseInt(timeMatch[1]) * 60 + parseInt(timeMatch[2]) + parseInt(timeMatch[3]) / 1000;
             endTime = parseInt(timeMatch[4]) * 60 + parseInt(timeMatch[5]) + parseInt(timeMatch[6]) / 1000;
           } else if (timeMatch.length === 7) {
-            // 格式: 00:00:00 --> 00:00:00 (没有毫秒)
+            // 鏍煎紡: 00:00:00 --> 00:00:00 (娌℃湁姣)
             startTime = parseInt(timeMatch[1]) * 3600 + parseInt(timeMatch[2]) * 60 + parseInt(timeMatch[3]);
             endTime = parseInt(timeMatch[4]) * 3600 + parseInt(timeMatch[5]) * 60 + parseInt(timeMatch[6]);
           }
           
           i++;
-          // 读取字幕文本（可能跨多行）
+          // 璇诲彇瀛楀箷鏂囨湰锛堝彲鑳借法澶氳锛?
           let textContent = '';
           while (i < lines.length && lines[i].trim() !== '' && !lines[i].includes('-->')) {
             textContent += (textContent ? ' ' : '') + lines[i].trim();
@@ -108,7 +130,7 @@ function SidebarLeft({ onVideoUpload, onVideoRemove, onSegmentsGenerated, jumpTo
           
           if (textContent.trim()) {
             parsedSubtitles.push({ startTime, endTime, text: textContent.trim() });
-            console.log('[SidebarLeft] 添加字幕:', { startTime, endTime, text: textContent.trim() });
+            console.log('[SidebarLeft] 娣诲姞瀛楀箷:', { startTime, endTime, text: textContent.trim() });
           }
         } else {
           i++;
@@ -116,56 +138,62 @@ function SidebarLeft({ onVideoUpload, onVideoRemove, onSegmentsGenerated, jumpTo
       }
       
       setSubtitles(parsedSubtitles);
-      console.log('[SidebarLeft] 解析完成，共', parsedSubtitles.length, '条字幕');
+      console.log('[SidebarLeft] subtitles parsed:', parsedSubtitles.length);
     } catch (error) {
-      console.error('[SidebarLeft] 解析字幕失败:', error);
+      console.error('[SidebarLeft] 瑙ｆ瀽瀛楀箷澶辫触:', error);
     }
   };
 
-  // 建立 WebSocket 连接
+  // 寤虹珛 WebSocket 杩炴帴
   const connectWebSocket = (fileId) => {
-    // 生产环境不支持 WebSocket，直接跳过
-    if (import.meta.env.PROD || import.meta.env.MODE === 'production') {
-      console.log('[WebSocket] 生产环境不支持 WebSocket，跳过连接');
-      setUploadProgress(100);
-      setUploadPhase('complete');
-      return;
-    }
-
-    // 关闭旧连接
-    if (wsConnection) {
+    // 鍏抽棴鏃ц繛鎺?    if (wsConnection) {
       wsConnection.close();
     }
 
-    // 创建 WebSocket 连接（仅开发环境）
-    const wsUrl = `ws://localhost:3000/`;
+    const serverUrl = SERVER_URL || window.location.origin;
+    const wsUrl = serverUrl.startsWith('https')
+      ? serverUrl.replace(/^https/, 'wss')
+      : serverUrl.replace(/^http/, 'ws');
     const ws = new WebSocket(wsUrl);
 
     ws.onopen = () => {
-      console.log('[WebSocket] 连接已建立');
-      // 注册 fileId
+      console.log('[WebSocket] 杩炴帴宸插缓绔?);
+      // 娉ㄥ唽 fileId
       ws.send(JSON.stringify({ type: 'register', fileId }));
     };
 
     ws.onmessage = (event) => {
       try {
         const progressData = JSON.parse(event.data);
-        console.log('[WebSocket] 进度更新:', progressData);
+        console.log('[WebSocket] 杩涘害鏇存柊:', progressData);
         
-        // 更新进度和阶段
+        // 鏇存柊杩涘害鍜岄樁娈?
         setUploadProgress(progressData.percentage);
         setUploadPhase(progressData.phase);
+        if (progressData.phase === 'done' && progressData.result) {
+          applyVideoResult(progressData.result).then(() => {
+            setIsUploading(false);
+            setUploadingFile(null);
+            setUploadStatus({ success: true, message: progressData.result.filename + ' 澶勭悊瀹屾垚' });
+            setTimeout(() => closeWebSocket(), 1000);
+          });
+        }
+        if (progressData.phase === 'error') {
+          setIsUploading(false);
+          setUploadingFile(null);
+          setUploadStatus({ success: false, message: progressData.message || '澶勭悊澶辫触' });
+        }
       } catch (error) {
-        console.error('[WebSocket] 解析消息失败:', error);
+        console.error('[WebSocket] 瑙ｆ瀽娑堟伅澶辫触:', error);
       }
     };
 
     ws.onerror = (error) => {
-      console.error('[WebSocket] 错误:', error);
+      console.error('[WebSocket] 閿欒:', error);
     };
 
     ws.onclose = () => {
-      console.log('[WebSocket] 连接已关闭');
+      console.log('[WebSocket] 杩炴帴宸插叧闂?);
       setWsConnection(null);
     };
 
@@ -173,7 +201,7 @@ function SidebarLeft({ onVideoUpload, onVideoRemove, onSegmentsGenerated, jumpTo
     return ws;
   };
 
-  // 关闭 WebSocket 连接
+  // 鍏抽棴 WebSocket 杩炴帴
   const closeWebSocket = () => {
     if (wsConnection) {
       wsConnection.close();
@@ -181,7 +209,7 @@ function SidebarLeft({ onVideoUpload, onVideoRemove, onSegmentsGenerated, jumpTo
     }
   };
 
-  // 组件卸载时关闭 WebSocket
+  // 缁勪欢鍗歌浇鏃跺叧闂?WebSocket
   useEffect(() => {
     return () => {
       closeWebSocket();
@@ -189,11 +217,11 @@ function SidebarLeft({ onVideoUpload, onVideoRemove, onSegmentsGenerated, jumpTo
   }, []);
 
   const handleFileUpload = (file) => {
-    console.log('=== 视频文件信息 ===');
-    console.log('文件名:', file.name);
-    console.log('文件大小:', formatFileSize(file.size));
-    console.log('文件类型:', file.type);
-    console.log('最后修改时间:', file.lastModifiedDate);
+    console.log('=== 瑙嗛鏂囦欢淇℃伅 ===');
+    console.log('鏂囦欢鍚?', file.name);
+    console.log('鏂囦欢澶у皬:', formatFileSize(file.size));
+    console.log('鏂囦欢绫诲瀷:', file.type);
+    console.log('鏈€鍚庝慨鏀规椂闂?', file.lastModifiedDate);
     console.log('=====================');
 
     setIsUploading(true);
@@ -206,59 +234,31 @@ function SidebarLeft({ onVideoUpload, onVideoRemove, onSegmentsGenerated, jumpTo
     const formData = new FormData()
     formData.append('video', file)
 
-    // 使用 XMLHttpRequest 实现精确上传进度
+    // 浣跨敤 XMLHttpRequest 瀹炵幇绮剧‘涓婁紶杩涘害
     const xhr = new XMLHttpRequest();
     
-    // 上传进度事件
+    // 涓婁紶杩涘害浜嬩欢
     xhr.upload.addEventListener('progress', (e) => {
       if (e.lengthComputable) {
         const uploadPercentage = (e.loaded / e.total) * 100;
-        // 上传阶段占总进度的 30%
+        // 涓婁紶闃舵鍗犳€昏繘搴︾殑 30%
         const adjustedProgress = uploadPercentage * 0.3;
         setUploadProgress(Math.round(adjustedProgress));
-        console.log(`[上传进度] ${e.loaded}/${e.total} (${adjustedProgress.toFixed(1)}%)`);
+        console.log(`[涓婁紶杩涘害] ${e.loaded}/${e.total} (${adjustedProgress.toFixed(1)}%)`);
       }
     });
 
     // 上传成功完成
     xhr.addEventListener('load', () => {
+      let keepProcessing = false;
       try {
         const result = JSON.parse(xhr.responseText);
-        
+
         if (xhr.status === 200) {
-          // 上传完成，建立 WebSocket 接收服务器处理进度
+          keepProcessing = !!result.processing;
           connectWebSocket(result.fileId);
-
-          const videoData = {
-            url: `${STATIC_BASE_URL}${result.path}`,
-            filename: result.filename,
-            size: result.size,
-            fileId: result.fileId,
-            transcript: result.transcript || '',
-            vttPath: result.vttPath || '',
-            hls: result.hls || null,
-          };
-
-          setUploadedVideo(videoData);
-
-          // 解析字幕
-          const parseSubtitles = async () => {
-            if (videoData.vttPath) {
-              await parseVTT(videoData.vttPath);
-            }
-
-            // 等待服务器推送完成状态，然后关闭 WebSocket
-            setTimeout(() => {
-              closeWebSocket();
-            }, 1000);
-
-            if (onVideoUpload) {
-              onVideoUpload(videoData);
-            }
-            setUploadStatus({ success: true, message: result.filename + ' 上传成功' });
-          };
-
-          parseSubtitles();
+          applyVideoResult(result);
+          setUploadStatus({ success: true, message: result.filename + ' 上传成功，正在处理...' });
         } else {
           console.error('上传失败:', result.error);
           closeWebSocket();
@@ -276,15 +276,16 @@ function SidebarLeft({ onVideoUpload, onVideoRemove, onSegmentsGenerated, jumpTo
         }, 3000);
       }
 
-      setIsUploading(false);
-      setUploadingFile(null);
+      if (!keepProcessing) {
+        setIsUploading(false);
+        setUploadingFile(null);
+      }
     });
-
-    // 上传失败
+    // 涓婁紶澶辫触
     xhr.addEventListener('error', () => {
-      console.error('网络错误');
+      console.error('缃戠粶閿欒');
       closeWebSocket();
-      setUploadStatus({ success: false, message: '网络连接失败，请检查服务器是否运行' });
+      setUploadStatus({ success: false, message: '缃戠粶杩炴帴澶辫触锛岃妫€鏌ユ湇鍔″櫒鏄惁杩愯' });
       setTimeout(() => {
         setUploadStatus(null);
       }, 3000);
@@ -292,11 +293,11 @@ function SidebarLeft({ onVideoUpload, onVideoRemove, onSegmentsGenerated, jumpTo
       setUploadingFile(null);
     });
 
-    // 上传被中止
+    // 涓婁紶琚腑姝?
     xhr.addEventListener('abort', () => {
-      console.log('上传被取消');
+      console.log('涓婁紶琚彇娑?);
       closeWebSocket();
-      setUploadStatus({ success: false, message: '上传已取消' });
+      setUploadStatus({ success: false, message: '涓婁紶宸插彇娑? });
       setTimeout(() => {
         setUploadStatus(null);
       }, 3000);
@@ -304,17 +305,17 @@ function SidebarLeft({ onVideoUpload, onVideoRemove, onSegmentsGenerated, jumpTo
       setUploadingFile(null);
     });
 
-    // 发送请求
+    // 鍙戦€佽姹?
     xhr.open('POST', `${SERVER_URL}/upload/video`);
     xhr.send(formData);
   };
 
-  // 处理时间更新
+  // 澶勭悊鏃堕棿鏇存柊
   const handleTimeUpdate = (time) => {
     setCurrentTime(time);
   };
 
-  // 处理字幕点击跳转
+  // 澶勭悊瀛楀箷鐐瑰嚮璺宠浆
   const handleSubtitleClick = (time) => {
     if (onJumpToTime) {
       onJumpToTime(time);
@@ -377,7 +378,7 @@ function SidebarLeft({ onVideoUpload, onVideoRemove, onSegmentsGenerated, jumpTo
               <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
               <path d="M16 21h5v-5" />
             </svg>
-            重新上传
+            閲嶆柊涓婁紶
           </button>
         </div>
       );
@@ -422,7 +423,7 @@ function SidebarLeft({ onVideoUpload, onVideoRemove, onSegmentsGenerated, jumpTo
     <aside className="sidebar-left">
       <div className="panel">
         <div className="panel-header">
-          <h2>上传视频</h2>
+          <h2>涓婁紶瑙嗛</h2>
         </div>
         {renderUploadArea()}
         <div className="divider"></div>

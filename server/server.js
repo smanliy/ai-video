@@ -1,4 +1,4 @@
-import express from 'express';
+﻿import express from 'express';
 import multer from 'multer';
 import cors from 'cors';
 import { v4 as uuidv4 } from 'uuid';
@@ -16,7 +16,7 @@ import { convertToHLS } from './hls-service.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// 加载 .env 文件
+// 鍔犺浇 .env 鏂囦欢
 const envPath = path.join(__dirname, '..', '.env');
 if (fs.existsSync(envPath)) {
   const envContent = fs.readFileSync(envPath, 'utf8');
@@ -30,10 +30,10 @@ if (fs.existsSync(envPath)) {
       }
     }
   }
-  console.log(`[INFO] 已加载环境变量文件: ${envPath}`);
+  console.log(`[INFO] 宸插姞杞界幆澧冨彉閲忔枃浠? ${envPath}`);
 }
 
-// 加载 .env.local 文件（优先级更高）
+// 鍔犺浇 .env.local 鏂囦欢锛堜紭鍏堢骇鏇撮珮锛?
 const envLocalPath = path.join(__dirname, '..', '.env.local');
 if (fs.existsSync(envLocalPath)) {
   const envContent = fs.readFileSync(envLocalPath, 'utf8');
@@ -47,52 +47,52 @@ if (fs.existsSync(envLocalPath)) {
       }
     }
   }
-  console.log(`[INFO] 已加载环境变量文件: ${envLocalPath}`);
+  console.log(`[INFO] 宸插姞杞界幆澧冨彉閲忔枃浠? ${envLocalPath}`);
 }
 
 const app = express();
 const PORT = env.PORT || 3000;
 
-// 存储 WebSocket 连接（fileId -> ws）
+// 瀛樺偍 WebSocket 杩炴帴锛坒ileId -> ws锛?
 const wsConnections = new Map();
 
-// 创建 HTTP 服务器
+// 鍒涘缓 HTTP 鏈嶅姟鍣?
 const server = createServer(app);
 
-// 创建 WebSocket 服务器
+// 鍒涘缓 WebSocket 鏈嶅姟鍣?
 const wss = new WebSocketServer({ server });
 
 wss.on('connection', (ws) => {
-  log('WebSocket 客户端已连接');
+  log('WebSocket 瀹㈡埛绔凡杩炴帴');
 
   ws.on('message', (message) => {
     try {
       const data = JSON.parse(message.toString());
       if (data.type === 'register' && data.fileId) {
         wsConnections.set(data.fileId, ws);
-        log(`WebSocket 已注册 fileId: ${data.fileId}`);
+        log(`WebSocket 宸叉敞鍐?fileId: ${data.fileId}`);
 
-        // 设置连接关闭时清理
+        // 璁剧疆杩炴帴鍏抽棴鏃舵竻鐞?
         ws.on('close', () => {
           wsConnections.delete(data.fileId);
-          log(`WebSocket 连接已断开，fileId: ${data.fileId}`);
+          log(`WebSocket 杩炴帴宸叉柇寮€锛宖ileId: ${data.fileId}`);
         });
       }
     } catch (error) {
-      log(`WebSocket 消息解析错误: ${error.message}`);
+      log(`WebSocket 娑堟伅瑙ｆ瀽閿欒: ${error.message}`);
     }
   });
 
   ws.on('error', (error) => {
-    log(`WebSocket 错误: ${error.message}`);
+    log(`WebSocket 閿欒: ${error.message}`);
   });
 
   ws.on('close', () => {
-    log('WebSocket 客户端已断开连接');
+    log('WebSocket 瀹㈡埛绔凡鏂紑杩炴帴');
   });
 });
 
-// 发送进度消息
+// 鍙戦€佽繘搴︽秷鎭?
 const sendProgress = (fileId, phase, percentage, message) => {
   const ws = wsConnections.get(fileId);
   if (ws && ws.readyState === WebSocket.OPEN) {
@@ -103,7 +103,20 @@ const sendProgress = (fileId, phase, percentage, message) => {
       message: message || ''
     };
     ws.send(JSON.stringify(progressData));
-    log(`[进度推送] ${fileId}: ${phase} - ${percentage}%`);
+    log(`[杩涘害鎺ㄩ€乚 ${fileId}: ${phase} - ${percentage}%`);
+  }
+};
+
+const sendProcessingResult = (fileId, result) => {
+  const ws = wsConnections.get(fileId);
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({
+      fileId,
+      phase: 'done',
+      percentage: 100,
+      message: 'processing complete',
+      result
+    }));
   }
 };
 
@@ -145,7 +158,7 @@ const fileFilter = (req, file, cb) => {
   if (ALLOWED_MIME_TYPES.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new Error('文件类型不合法，仅支持 MP4、WebM、MOV 格式'), false);
+    cb(new Error('鏂囦欢绫诲瀷涓嶅悎娉曪紝浠呮敮鎸?MP4銆乄ebM銆丮OV 鏍煎紡'), false);
   }
 };
 
@@ -156,6 +169,56 @@ const upload = multer({
     fileSize: 500 * 1024 * 1024
   }
 });
+
+const processUploadedVideo = async ({ fileId, file, newVideoPath, baseDir, subtitleDir }) => {
+  try {
+    sendProgress(fileId, 'transcoding', 40, 'processing started');
+
+    const [transcript, hlsData] = await Promise.all([
+      transcribeVideo(newVideoPath, subtitleDir)
+        .then(result => {
+          sendProgress(fileId, 'transcribing', 65, 'transcription complete');
+          return result;
+        })
+        .catch(err => {
+          log(`transcription failed: ${err.message}`);
+          return 'transcription failed';
+        }),
+
+      convertToHLS(newVideoPath, baseDir)
+        .then(result => {
+          sendProgress(fileId, 'transcoding', 55, 'HLS complete');
+          return result;
+        })
+        .catch(err => {
+          log(`HLS failed: ${err.message}`);
+          return null;
+        })
+    ]);
+
+    sendProgress(fileId, 'analyzing', 85, 'analyzing content');
+
+    const result = {
+      success: true,
+      fileId,
+      filename: file.originalname,
+      size: file.size,
+      mimeType: file.mimetype,
+      path: `/uploads/videos/transcription/${fileId}/video/${fileId}${path.extname(file.filename)}`,
+      vttPath: `/uploads/videos/transcription/${fileId}/subtitle/${fileId}.vtt`,
+      transcript,
+      hls: hlsData ? {
+        masterPlaylistUrl: hlsData.masterPlaylistUrl,
+        streams: hlsData.streams
+      } : null
+    };
+
+    sendProcessingResult(fileId, result);
+  } catch (error) {
+    log(`background processing failed: ${error.message}`);
+    sendProgress(fileId, 'error', 100, error.message);
+  }
+};
 
 app.use(cors());
 app.use(express.json());
@@ -168,116 +231,59 @@ app.post('/upload/video', upload.single('video'), async (req, res) => {
     if (!file) {
       return res.status(400).json({
         success: false,
-        error: '请选择要上传的文件'
+        error: 'No video file selected'
       });
     }
 
     const fileId = path.basename(file.filename, path.extname(file.filename));
-
-    // 创建目录结构
     const baseDir = path.join(__dirname, 'uploads', 'videos', 'transcription', fileId);
     const videoDir = path.join(baseDir, 'video');
     const audioDir = path.join(baseDir, 'audio');
     const subtitleDir = path.join(baseDir, 'subtitle');
     const chapterDir = path.join(baseDir, 'chapter');
 
-    // 创建所有子文件夹
     ensureDirectoryExists(baseDir);
     ensureDirectoryExists(videoDir);
     ensureDirectoryExists(audioDir);
     ensureDirectoryExists(subtitleDir);
     ensureDirectoryExists(chapterDir);
 
-    // 将视频文件移动到 video/ 目录
     const videoPath = path.join(UPLOAD_DIR, file.filename);
     const newVideoPath = path.join(videoDir, `${fileId}${path.extname(file.filename)}`);
     fs.renameSync(videoPath, newVideoPath);
 
-    log(`=== 视频上传开始 ===`);
-    log(`视频文件: ${file.originalname}`);
-    log(`文件大小: ${(file.size / 1024 / 1024).toFixed(2)} MB`);
-    log(`文件ID: ${fileId}`);
-    log(`保存路径: ${newVideoPath}`);
-
-    // 上传完成，开始服务器处理阶段
-    sendProgress(fileId, 'uploading', 30, '文件上传完成，开始处理...');
-
-    // 并发执行：语音识别 和 HLS转码
-    log(`--- 并发任务开始 ---`);
-
-    // 转码阶段
-    sendProgress(fileId, 'transcoding', 40, '开始转码...');
-
-    const [transcript, hlsData] = await Promise.all([
-      // 任务1：语音识别（生成字幕）
-      transcribeVideo(newVideoPath, subtitleDir)
-        .then(result => {
-          sendProgress(fileId, 'transcribing', 65, '语音识别完成');
-          log(`语音识别成功，字幕长度: ${result.length} 字符`);
-          log(`字幕VTT已保存到: ${subtitleDir}`);
-          return result;
-        })
-        .catch(err => {
-          log(`语音识别失败: ${err.message}`);
-          return '语音识别失败';
-        }),
-
-      // 任务2：HLS转码（生成多清晰度流）
-      convertToHLS(newVideoPath, baseDir)
-        .then(result => {
-          sendProgress(fileId, 'transcoding', 55, 'HLS转码完成');
-          log(`HLS转码成功，生成 master.m3u8: ${result.masterPlaylistUrl}`);
-          log(`清晰度级别: ${result.streams.map(s => s.quality).join(', ')}`);
-          return result;
-        })
-        .catch(err => {
-          log(`HLS转码失败: ${err.message}`);
-          log(`将使用原始视频播放`);
-          return null;
-        })
-    ]);
-
-    log(`--- 并发任务完成 ---`);
-
-    // 分析阶段
-    sendProgress(fileId, 'analyzing', 85, '正在分析视频内容...');
+    log(`Upload accepted: ${file.originalname} (${(file.size / 1024 / 1024).toFixed(2)} MB), fileId=${fileId}`);
 
     const response = {
       success: true,
-      fileId: fileId,
+      processing: true,
+      fileId,
       filename: file.originalname,
       size: file.size,
       mimeType: file.mimetype,
       path: `/uploads/videos/transcription/${fileId}/video/${fileId}${path.extname(file.filename)}`,
       vttPath: `/uploads/videos/transcription/${fileId}/subtitle/${fileId}.vtt`,
-      transcript: transcript,
-      hls: hlsData ? {
-        masterPlaylistUrl: hlsData.masterPlaylistUrl,
-        streams: hlsData.streams
-      } : null
+      transcript: '',
+      hls: null
     };
 
-    // 完成阶段
-    sendProgress(fileId, 'done', 100, '处理完成');
-
-    log(`=== 视频上传完成 ===`);
-    log(`返回字段: fileId, vttPath, transcript, hls`);
-    log(`章节VTT将在前端获取视频真实时长后生成`);
-
     res.json(response);
+
+    setImmediate(() => {
+      processUploadedVideo({ fileId, file, newVideoPath, baseDir, subtitleDir });
+    });
   } catch (error) {
-    log(`上传错误: ${error.message}`);
+    log(`Upload error: ${error.message}`);
     res.status(500).json({
       success: false,
-      error: '服务器内部错误'
+      error: 'Internal server error'
     });
   }
 });
 
 /**
- * 获取视频时长（秒）
- */
-async function getVideoDuration(videoPath) {
+ * Get video duration in seconds.
+ */async function getVideoDuration(videoPath) {
   return new Promise((resolve, reject) => {
     const { spawn } = require('child_process');
     const ffprobe = spawn('ffprobe', [
@@ -310,24 +316,24 @@ async function getVideoDuration(videoPath) {
 app.use((error, req, res, next) => {
   if (error instanceof multer.MulterError) {
     if (error.code === 'LIMIT_FILE_SIZE') {
-      log('文件过大，超出限制');
+      log('Uploaded file is too large');
       return res.status(413).json({
         success: false,
-        error: '文件过大，最大支持500MB'
+        error: 'File is too large. Maximum size is 500MB.'
       });
     }
-  } else if (error.message.includes('文件类型不合法')) {
-    log(`文件类型错误: ${error.message}`);
+  } else if (error.message.includes('Invalid file type')) {
+    log(`Invalid file type: ${error.message}`);
     return res.status(400).json({
       success: false,
       error: error.message
     });
   }
 
-  log(`未知错误: ${error.message}`);
+  log(`鏈煡閿欒: ${error.message}`);
   res.status(500).json({
     success: false,
-    error: '服务器内部错误'
+    error: 'Internal server error'
   });
 });
 
@@ -336,53 +342,53 @@ app.get('/health', (req, res) => {
 });
 
 /**
- * 分析视频字幕（流式）
+ * 鍒嗘瀽瑙嗛瀛楀箷锛堟祦寮忥級
  */
 app.post('/api/analyze/stream', async (req, res) => {
   try {
     const { transcript } = req.body;
 
     if (!transcript) {
-      return res.status(400).json({ error: '缺少 transcript 参数' });
+      return res.status(400).json({ error: '缂哄皯 transcript 鍙傛暟' });
     }
 
-    log(`[API] 接收到视频分析请求，字幕长度: ${transcript.length}`);
+    log(`[API] 鎺ユ敹鍒拌棰戝垎鏋愯姹傦紝瀛楀箷闀垮害: ${transcript.length}`);
 
     const webStream = await analyzeTranscriptStream(transcript);
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
     res.setHeader('Transfer-Encoding', 'chunked');
 
-    // 将 Web Stream 转换为 Node.js Stream 并管道到响应
+    // 灏?Web Stream 杞崲涓?Node.js Stream 骞剁閬撳埌鍝嶅簲
     const nodeReadable = Readable.fromWeb(webStream);
     nodeReadable.pipe(res);
   } catch (error) {
-    log(`[API] 分析视频失败: ${error.message}`);
-    res.status(500).json({ error: '分析失败' });
+    log(`[API] 鍒嗘瀽瑙嗛澶辫触: ${error.message}`);
+    res.status(500).json({ error: '鍒嗘瀽澶辫触' });
   }
 });
 
 /**
- * 生成章节VTT
+ * 鐢熸垚绔犺妭VTT
  */
 app.post('/api/generate-chapters', async (req, res) => {
   try {
     const { fileId, transcript, duration } = req.body;
 
     if (!fileId || !transcript) {
-      return res.status(400).json({ error: '缺少必要参数' });
+      return res.status(400).json({ error: '缂哄皯蹇呰鍙傛暟' });
     }
 
-    log(`[API] 接收到章节生成请求，fileId: ${fileId}, 时长: ${duration}s`);
+    log(`[API] 鎺ユ敹鍒扮珷鑺傜敓鎴愯姹傦紝fileId: ${fileId}, 鏃堕暱: ${duration}s`);
 
-    // 创建章节目录
+    // 鍒涘缓绔犺妭鐩綍
     const chapterDir = path.join(__dirname, 'uploads', 'videos', 'transcription', fileId, 'chapter');
     ensureDirectoryExists(chapterDir);
 
-    // 分析字幕并生成章节
+    // 鍒嗘瀽瀛楀箷骞剁敓鎴愮珷鑺?
     const analysisResult = await analyzeTranscript(transcript, duration);
     const vttContent = generateChapterVTT(analysisResult);
 
-    // 保存VTT文件
+    // 淇濆瓨VTT鏂囦欢
     const vttPath = path.join(chapterDir, `${fileId}_chapters.vtt`);
     fs.writeFileSync(vttPath, vttContent, 'utf8');
 
@@ -395,34 +401,34 @@ app.post('/api/generate-chapters', async (req, res) => {
       segments: analysisResult.segments
     });
   } catch (error) {
-    log(`[API] 生成章节失败: ${error.message}`);
+    log(`[API] 鐢熸垚绔犺妭澶辫触: ${error.message}`);
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
 /**
- * 聊天API
+ * 鑱婂ぉAPI
  */
 app.post('/api/chat', async (req, res) => {
   try {
     const { question, transcript, messages } = req.body;
 
     if (!question) {
-      return res.status(400).json({ error: '缺少 question 参数' });
+      return res.status(400).json({ error: '缂哄皯 question 鍙傛暟' });
     }
 
-    log(`[API] 接收到聊天请求: ${question.substring(0, 30)}...`);
+    log(`[API] 鎺ユ敹鍒拌亰澶╄姹? ${question.substring(0, 30)}...`);
 
-    // 构建消息历史
+    // 鏋勫缓娑堟伅鍘嗗彶
     const chatMessages = [];
 
-    // 添加系统提示
+    // 娣诲姞绯荤粺鎻愮ず
     chatMessages.push({
       role: 'system',
-      content: '你是一个视频内容分析助手，擅长分析视频字幕内容并回答相关问题。'
+      content: '浣犳槸涓€涓棰戝唴瀹瑰垎鏋愬姪鎵嬶紝鎿呴暱鍒嗘瀽瑙嗛瀛楀箷鍐呭骞跺洖绛旂浉鍏抽棶棰樸€?
     });
 
-    // 添加历史消息
+    // 娣诲姞鍘嗗彶娑堟伅
     if (messages && Array.isArray(messages)) {
       messages.forEach(msg => {
         chatMessages.push({
@@ -432,9 +438,9 @@ app.post('/api/chat', async (req, res) => {
       });
     }
 
-    // 添加当前问题（包含字幕上下文）
+    // 娣诲姞褰撳墠闂锛堝寘鍚瓧骞曚笂涓嬫枃锛?
     const userContent = transcript
-      ? `视频字幕内容：\n${transcript}\n\n问题：${question}`
+      ? `瑙嗛瀛楀箷鍐呭锛歕n${transcript}\n\n闂锛?{question}`
       : question;
 
     chatMessages.push({
@@ -446,71 +452,71 @@ app.post('/api/chat', async (req, res) => {
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
     res.setHeader('Transfer-Encoding', 'chunked');
 
-    // 将 Web Stream 转换为 Node.js Stream 并管道到响应
+    // 灏?Web Stream 杞崲涓?Node.js Stream 骞剁閬撳埌鍝嶅簲
     const nodeReadable = Readable.fromWeb(webStream);
     nodeReadable.pipe(res);
   } catch (error) {
-    log(`[API] 聊天请求失败: ${error.message}`);
-    res.status(500).json({ error: '聊天失败' });
+    log(`[API] 鑱婂ぉ璇锋眰澶辫触: ${error.message}`);
+    res.status(500).json({ error: '鑱婂ぉ澶辫触' });
   }
 });
 
 /**
- * 总结API - 根据对话历史生成总结（流式输出）
+ * 鎬荤粨API - 鏍规嵁瀵硅瘽鍘嗗彶鐢熸垚鎬荤粨锛堟祦寮忚緭鍑猴級
  */
 app.post('/api/summarize', async (req, res) => {
   try {
     const { messages } = req.body;
 
     if (!messages || !Array.isArray(messages)) {
-      return res.status(400).json({ success: false, error: '缺少 messages 参数或格式不正确' });
+      return res.status(400).json({ success: false, error: '缂哄皯 messages 鍙傛暟鎴栨牸寮忎笉姝ｇ‘' });
     }
 
-    log(`[API] 接收到总结请求，消息数量: ${messages.length}`);
+    log(`[API] 鎺ユ敹鍒版€荤粨璇锋眰锛屾秷鎭暟閲? ${messages.length}`);
 
-    // 构建总结提示
+    // 鏋勫缓鎬荤粨鎻愮ず
     const chatMessages = [];
 
-    // 添加系统提示
+    // 娣诲姞绯荤粺鎻愮ず
     chatMessages.push({
       role: 'system',
-      content: '你是一个专业的总结助手，请对以下对话内容进行简明扼要的总结。总结需要包含：1) 主要讨论的主题；2) 关键要点；3) 得出的结论或建议。请使用中文，保持简洁清晰。'
+      content: '浣犳槸涓€涓笓涓氱殑鎬荤粨鍔╂墜锛岃瀵逛互涓嬪璇濆唴瀹硅繘琛岀畝鏄庢壖瑕佺殑鎬荤粨銆傛€荤粨闇€瑕佸寘鍚細1) 涓昏璁ㄨ鐨勪富棰橈紱2) 鍏抽敭瑕佺偣锛?) 寰楀嚭鐨勭粨璁烘垨寤鸿銆傝浣跨敤涓枃锛屼繚鎸佺畝娲佹竻鏅般€?
     });
 
-    // 将消息历史转换为文本
+    // 灏嗘秷鎭巻鍙茶浆鎹负鏂囨湰
     const conversationText = messages.map(msg => {
-      const role = msg.role === 'assistant' ? '助手' : '用户';
+      const role = msg.role === 'assistant' ? '鍔╂墜' : '鐢ㄦ埛';
       return `${role}: ${msg.content}`;
     }).join('\n\n');
 
-    // 添加总结请求
+    // 娣诲姞鎬荤粨璇锋眰
     chatMessages.push({
       role: 'user',
-      content: `请总结以下对话内容：\n\n${conversationText}`
+      content: `璇锋€荤粨浠ヤ笅瀵硅瘽鍐呭锛歕n\n${conversationText}`
     });
 
-    // 调用 AI 进行总结（流式）
+    // 璋冪敤 AI 杩涜鎬荤粨锛堟祦寮忥級
     const webStream = await chatWithHistoryStream(chatMessages);
 
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
     res.setHeader('Transfer-Encoding', 'chunked');
 
-    // 将 Web Stream 转换为 Node.js Stream 并管道到响应
+    // 灏?Web Stream 杞崲涓?Node.js Stream 骞剁閬撳埌鍝嶅簲
     const nodeReadable = Readable.fromWeb(webStream);
     nodeReadable.pipe(res);
 
-    log(`[API] 总结流式响应已发送`);
+    log(`[API] 鎬荤粨娴佸紡鍝嶅簲宸插彂閫乣);
   } catch (error) {
-    log(`[API] 总结请求失败: ${error.message}`);
-    res.status(500).json({ success: false, error: '总结失败' });
+    log(`[API] 鎬荤粨璇锋眰澶辫触: ${error.message}`);
+    res.status(500).json({ success: false, error: '鎬荤粨澶辫触' });
   }
 });
 
 server.listen(PORT, () => {
-  log(`服务器运行在 http://localhost:${PORT}`);
-  log(`WebSocket 服务器已启动`);
-  log(`上传目录: ${UPLOAD_DIR}`);
-  log(`静态文件目录: ${path.join(__dirname, 'uploads')}`);
-  log('支持的视频格式: MP4, WebM, MOV');
-  log('已集成 Whisper 语音识别');
+  log(`鏈嶅姟鍣ㄨ繍琛屽湪 http://localhost:${PORT}`);
+  log(`WebSocket 鏈嶅姟鍣ㄥ凡鍚姩`);
+  log(`涓婁紶鐩綍: ${UPLOAD_DIR}`);
+  log(`闈欐€佹枃浠剁洰褰? ${path.join(__dirname, 'uploads')}`);
+  log('鏀寔鐨勮棰戞牸寮? MP4, WebM, MOV');
+  log('宸查泦鎴?Whisper 璇煶璇嗗埆');
 });
